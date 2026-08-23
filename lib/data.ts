@@ -1,4 +1,4 @@
-export const ITEMS = {
+export const ITEMS: Record<number, { name_es: string; name_en: string; pcs_box: number; unit: string }> = {
   1: { name_es: 'Toilet Paper', name_en: 'Toilet Paper', pcs_box: 60, unit: 'hileras' },
   2: { name_es: 'Kleenex', name_en: 'Kleenex', pcs_box: 30, unit: 'piezas' },
   3: { name_es: 'Paper Towel', name_en: 'Paper Towel', pcs_box: 30, unit: 'hileras' },
@@ -11,35 +11,6 @@ export const ITEMS = {
   10: { name_es: 'Coffee Cups', name_en: 'Coffee Cups', pcs_box: 400, unit: 'sleeve' },
   11: { name_es: 'Shower Caps', name_en: 'Shower Caps', pcs_box: 100, unit: 'bin' },
   12: { name_es: 'Laundry Bags', name_en: 'Laundry Bags', pcs_box: 1, unit: 'bolsa' },
-}
-
-export const STANDARDS_OUTSIDE = {
-  1: 48,  // Toilet Paper
-  2: 80,  // Kleenex
-  3: 15,  // Paper Towel
-  4: 135, // Soap
-  5: 48,  // Coffee
-  6: 48,  // Tea
-  7: 48,  // Decaf
-  8: 4,   // Water cases
-  9: 35,  // Vanity
-  10: 42, // Cups
-  11: 35, // Shower caps
-  12: 30, // Laundry
-}
-
-export const STANDARDS_MAIN_PISO = {
-  1: 144,
-  2: 80,
-  4: 200,
-  5: 288,
-  6: 288,
-  7: 288,
-  8: 10,
-  9: 240,
-  10: 126,
-  11: 100,
-  12: 1,
 }
 
 export const LODGES = [
