@@ -1,58 +1,110 @@
 // ============================================================
 // RESTOCK RUNNER — CATÁLOGO MAESTRO
-// Cada item define:
+// El estándar depende de ENTIDAD y, en Main Hotel, del ESPACIO.
+//   steps       -> cuántas unidades visuales hay al 100%
+//   pcsPerStep  -> piezas que representa cada unidad visual
 //   pcsBox      -> piezas por caja (para convertir a CAJAS al final)
-//   unitLabel   -> unidad VISUAL que el runner ve en el bridge/closet
-//   steps       -> cuántas unidades visuales caben al 100% (slider por pasos)
-//   priority    -> high = entra en URGENTE
-//   in          -> dónde existe el item
 // ============================================================
 
 export type Entity = 'outside' | 'main'
 export type RestockType = 'profundidad' | 'urgente'
 
+export interface Standard { steps: number; pcsPerStep: number }
+
 export interface Item {
   id: number
   es: string
   pcsBox: number
-  unitLabel: string      // singular
+  unitLabel: string
   unitLabelPlural: string
   priority: 'high' | 'medium' | 'low'
   in: Entity[]
-  steps: number          // unidades visuales al 100%
-  pcsPerStepOutside?: number  // piezas que representa cada unidad visual (outside)
-  pcsPerStepMain?: number     // idem para main hotel
+  outside?: Standard   // estándar por bridge
+  main?: Standard      // estándar Piso 2 y 3
+  TODO?: string        // dato aún no confirmado por Rodrigo
 }
+
+const U = (s: string, p: string) => ({ unitLabel: s, unitLabelPlural: p })
 
 export const ITEMS: Item[] = [
   // ---------- HIGH (entran en URGENTE) ----------
-  { id: 1,  es: 'Toilet Paper',  pcsBox: 60,    unitLabel: 'hilera',  unitLabelPlural: 'hileras', priority: 'high',   in: ['outside','main'], steps: 4,  pcsPerStepOutside: 12, pcsPerStepMain: 36 },
-  { id: 2,  es: 'Paper Towel',   pcsBox: 30,    unitLabel: 'hilera',  unitLabelPlural: 'hileras', priority: 'high',   in: ['outside','main'], steps: 3,  pcsPerStepOutside: 5,  pcsPerStepMain: 10 },
-  { id: 3,  es: 'Soap',          pcsBox: 200,   unitLabel: 'bin',     unitLabelPlural: 'bins',    priority: 'high',   in: ['outside','main'], steps: 4,  pcsPerStepOutside: 34, pcsPerStepMain: 50 },
-  { id: 4,  es: 'Coffee Pods',   pcsBox: 100,   unitLabel: 'caja verde', unitLabelPlural: 'cajas verdes', priority: 'high', in: ['outside','main'], steps: 2, pcsPerStepOutside: 24, pcsPerStepMain: 24 },
-  { id: 5,  es: 'Tea Pods',      pcsBox: 100,   unitLabel: 'caja verde', unitLabelPlural: 'cajas verdes', priority: 'high', in: ['outside','main'], steps: 2, pcsPerStepOutside: 24, pcsPerStepMain: 24 },
-  { id: 6,  es: 'Water',         pcsBox: 24,    unitLabel: 'case',    unitLabelPlural: 'cases',   priority: 'high',   in: ['outside','main'], steps: 4,  pcsPerStepOutside: 24, pcsPerStepMain: 24 },
+  { id: 1, es: 'Toilet Paper', pcsBox: 60, ...U('hilera','hileras'), priority: 'high', in: ['outside','main'],
+    outside: { steps: 4, pcsPerStep: 12 }, main: { steps: 4, pcsPerStep: 36 } },
+
+  { id: 2, es: 'Paper Towel', pcsBox: 30, ...U('hilera','hileras'), priority: 'high', in: ['outside'],
+    outside: { steps: 3, pcsPerStep: 5 } },
+
+  { id: 3, es: 'Soap', pcsBox: 200, ...U('cuarto de bin','cuartos de bin'), priority: 'high', in: ['outside','main'],
+    outside: { steps: 4, pcsPerStep: 34 }, main: { steps: 4, pcsPerStep: 50 } },
+
+  { id: 4, es: 'Coffee Pods', pcsBox: 100, ...U('caja verde','cajas verdes'), priority: 'high', in: ['outside','main'],
+    outside: { steps: 2, pcsPerStep: 24 }, main: { steps: 30, pcsPerStep: 24 } },
+
+  { id: 5, es: 'Tea Pods', pcsBox: 100, ...U('caja verde','cajas verdes'), priority: 'high', in: ['outside','main'],
+    outside: { steps: 2, pcsPerStep: 24 }, main: { steps: 30, pcsPerStep: 24 } },
+
+  { id: 6, es: 'Water', pcsBox: 24, ...U('case','cases'), priority: 'high', in: ['outside','main'],
+    outside: { steps: 4, pcsPerStep: 24 }, main: { steps: 10, pcsPerStep: 24 } },
 
   // ---------- MEDIUM ----------
-  { id: 7,  es: 'Decaf Pods',    pcsBox: 100,   unitLabel: 'caja verde', unitLabelPlural: 'cajas verdes', priority: 'medium', in: ['outside','main'], steps: 2, pcsPerStepOutside: 24, pcsPerStepMain: 24 },
-  { id: 8,  es: 'Kleenex',       pcsBox: 30,    unitLabel: 'hilera',  unitLabelPlural: 'hileras', priority: 'medium', in: ['outside','main'], steps: 3,  pcsPerStepOutside: 27, pcsPerStepMain: 27 },
-  { id: 9,  es: 'Coffee Cups',   pcsBox: 400,   unitLabel: 'sleeve',  unitLabelPlural: 'sleeves', priority: 'medium', in: ['outside','main'], steps: 3,  pcsPerStepOutside: 14, pcsPerStepMain: 18 },
-  { id: 10, es: 'Vanity Kit',    pcsBox: 100,   unitLabel: 'bin',     unitLabelPlural: 'bins',    priority: 'medium', in: ['outside','main'], steps: 4,  pcsPerStepOutside: 9,  pcsPerStepMain: 60 },
-  { id: 11, es: 'Shower Caps',   pcsBox: 100,   unitLabel: 'bin',     unitLabelPlural: 'bins',    priority: 'medium', in: ['outside','main'], steps: 4,  pcsPerStepOutside: 9,  pcsPerStepMain: 25 },
-  { id: 12, es: 'Laundry Bags',  pcsBox: 30,    unitLabel: 'bolsa',   unitLabelPlural: 'bolsas',  priority: 'medium', in: ['outside','main'], steps: 2,  pcsPerStepOutside: 15, pcsPerStepMain: 15 },
-  { id: 13, es: 'Makeup Wipes',  pcsBox: 200,   unitLabel: 'caja',    unitLabelPlural: 'cajas',   priority: 'medium', in: ['main'],           steps: 2,  pcsPerStepMain: 100 },
-  { id: 14, es: 'Slippers',      pcsBox: 100,   unitLabel: 'caja',    unitLabelPlural: 'cajas',   priority: 'medium', in: ['main'],           steps: 2,  pcsPerStepMain: 50 },
+  { id: 7, es: 'Decaf Pods', pcsBox: 100, ...U('caja verde','cajas verdes'), priority: 'medium', in: ['outside','main'],
+    outside: { steps: 2, pcsPerStep: 24 }, main: { steps: 30, pcsPerStep: 24 } },
+
+  { id: 8, es: 'Kleenex', pcsBox: 30, ...U('hilera','hileras'), priority: 'medium', in: ['outside','main'],
+    outside: { steps: 3, pcsPerStep: 27 }, main: { steps: 3, pcsPerStep: 27 } },
+
+  { id: 9, es: 'Coffee Cups', pcsBox: 400, ...U('sleeve','sleeves'), priority: 'medium', in: ['outside','main'],
+    outside: { steps: 3, pcsPerStep: 14 }, main: { steps: 7, pcsPerStep: 18 } },
+
+  { id: 10, es: 'Vanity Kit', pcsBox: 100, ...U('cuarto de bin','cuartos de bin'), priority: 'medium', in: ['outside','main'],
+    outside: { steps: 4, pcsPerStep: 9 }, main: { steps: 4, pcsPerStep: 60 } },
+
+  { id: 11, es: 'Shower Caps', pcsBox: 100, ...U('cuarto de bin','cuartos de bin'), priority: 'medium', in: ['outside','main'],
+    outside: { steps: 4, pcsPerStep: 9 }, main: { steps: 4, pcsPerStep: 25 }, TODO: 'pcs por caja en Main sin confirmar' },
+
+  { id: 12, es: 'Laundry Bags', pcsBox: 30, ...U('bolsa','bolsas'), priority: 'medium', in: ['outside','main'],
+    outside: { steps: 2, pcsPerStep: 15 }, main: { steps: 2, pcsPerStep: 15 } },
+
+  // ---------- EMBOTELLADOS (toda la isla) ----------
+  // Outside: 1 caja de cada uno. Main Piso 2/3: 3 cajas de cada uno.
+  { id: 13, es: 'Body Lotion', pcsBox: 12, ...U('caja','cajas'), priority: 'medium', in: ['outside','main'],
+    outside: { steps: 1, pcsPerStep: 12 }, main: { steps: 3, pcsPerStep: 12 } },
+  { id: 14, es: 'Body Wash', pcsBox: 12, ...U('caja','cajas'), priority: 'medium', in: ['outside','main'],
+    outside: { steps: 1, pcsPerStep: 12 }, main: { steps: 3, pcsPerStep: 12 } },
+  { id: 15, es: 'Shampoo', pcsBox: 12, ...U('caja','cajas'), priority: 'medium', in: ['outside','main'],
+    outside: { steps: 1, pcsPerStep: 12 }, main: { steps: 3, pcsPerStep: 12 } },
+  { id: 16, es: 'Conditioner', pcsBox: 12, ...U('caja','cajas'), priority: 'medium', in: ['outside','main'],
+    outside: { steps: 1, pcsPerStep: 12 }, main: { steps: 3, pcsPerStep: 12 } },
 
   // ---------- LOW (solo PROFUNDIDAD) ----------
-  { id: 15, es: 'Coasters',      pcsBox: 1000,  unitLabel: 'caja',    unitLabelPlural: 'cajas',   priority: 'low', in: ['outside','main'], steps: 2, pcsPerStepOutside: 500, pcsPerStepMain: 500 },
-  { id: 16, es: 'Notepads',      pcsBox: 30,    unitLabel: 'pack',    unitLabelPlural: 'packs',   priority: 'low', in: ['main'],           steps: 4, pcsPerStepMain: 30 },
-  { id: 17, es: 'Pens',          pcsBox: 150,   unitLabel: 'caja',    unitLabelPlural: 'cajas',   priority: 'low', in: ['main'],           steps: 2, pcsPerStepMain: 75 },
-  { id: 18, es: 'Condiment Kit', pcsBox: 240,   unitLabel: 'caja',    unitLabelPlural: 'cajas',   priority: 'low', in: ['main'],           steps: 2, pcsPerStepMain: 120 },
-  { id: 19, es: 'Palmolive',     pcsBox: 72,    unitLabel: 'caja',    unitLabelPlural: 'cajas',   priority: 'low', in: ['main'],           steps: 2, pcsPerStepMain: 36 },
-  { id: 20, es: 'Toothpaste',    pcsBox: 24,    unitLabel: 'caja',    unitLabelPlural: 'cajas',   priority: 'low', in: ['main'],           steps: 2, pcsPerStepMain: 12 },
-  { id: 21, es: 'Razors',        pcsBox: 144,   unitLabel: 'caja',    unitLabelPlural: 'cajas',   priority: 'low', in: ['main'],           steps: 2, pcsPerStepMain: 72 },
-  { id: 22, es: 'Hair Products', pcsBox: 12,    unitLabel: 'bin',     unitLabelPlural: 'bins',    priority: 'low', in: ['outside','main'], steps: 2, pcsPerStepOutside: 6, pcsPerStepMain: 6 },
-  { id: 23, es: 'Corkscrew',     pcsBox: 50,    unitLabel: 'caja',    unitLabelPlural: 'cajas',   priority: 'low', in: ['main'],           steps: 2, pcsPerStepMain: 25 },
+  { id: 17, es: 'Palmolive', pcsBox: 72, ...U('botellita','botellitas'), priority: 'low', in: ['outside','main'],
+    outside: { steps: 6, pcsPerStep: 1 }, main: { steps: 12, pcsPerStep: 1 }, TODO: 'estándar Main sin confirmar' },
+
+  { id: 18, es: 'Corkscrew', pcsBox: 50, ...U('pieza','piezas'), priority: 'low', in: ['outside','main'],
+    outside: { steps: 6, pcsPerStep: 1 }, main: { steps: 12, pcsPerStep: 1 }, TODO: 'pcs por caja y estándar Main sin confirmar' },
+
+  { id: 19, es: 'Condiment Kit', pcsBox: 240, ...U('bolsa (25 pzs)','bolsas (25 pzs)'), priority: 'low', in: ['outside','main'],
+    outside: { steps: 1, pcsPerStep: 25 }, main: { steps: 4, pcsPerStep: 25 }, TODO: 'cuántas bolsas por bridge y por piso' },
+
+  { id: 20, es: 'Makeup Wipes', pcsBox: 200, ...U('caja','cajas'), priority: 'low', in: ['outside','main'],
+    outside: { steps: 1, pcsPerStep: 200 }, main: { steps: 1, pcsPerStep: 200 }, TODO: 'estándar Main sin confirmar' },
+
+  { id: 21, es: 'Coasters', pcsBox: 1000, ...U('caja','cajas'), priority: 'low', in: ['outside','main'],
+    outside: { steps: 1, pcsPerStep: 1000 }, main: { steps: 1, pcsPerStep: 1000 }, TODO: 'estándar sin confirmar' },
+
+  { id: 22, es: 'Notepads', pcsBox: 30, ...U('pack','packs'), priority: 'low', in: ['outside','main'],
+    outside: { steps: 1, pcsPerStep: 30 }, main: { steps: 4, pcsPerStep: 30 }, TODO: 'estándar por bridge sin confirmar' },
+
+  { id: 23, es: 'Pens', pcsBox: 150, ...U('caja','cajas'), priority: 'low', in: ['outside','main'],
+    outside: { steps: 1, pcsPerStep: 150 }, main: { steps: 1, pcsPerStep: 150 }, TODO: 'estándar sin confirmar' },
+
+  // ---------- SOLO MAIN HOTEL ----------
+  { id: 24, es: 'Toothpaste', pcsBox: 24, ...U('caja','cajas'), priority: 'low', in: ['main'],
+    main: { steps: 1, pcsPerStep: 24 } },
+  { id: 25, es: 'Razors', pcsBox: 144, ...U('caja','cajas'), priority: 'low', in: ['main'],
+    main: { steps: 1, pcsPerStep: 144 } },
+  { id: 26, es: 'Slippers', pcsBox: 100, ...U('caja','cajas'), priority: 'low', in: ['main'],
+    main: { steps: 1, pcsPerStep: 100 }, TODO: "solo Hank's Closet" },
 ]
 
 export const ITEM_BY_ID: Record<number, Item> = Object.fromEntries(ITEMS.map(i => [i.id, i]))
@@ -70,28 +122,37 @@ export const LODGES = [
 
 export const PISOS = ['Piso 1', 'Piso 2', 'Piso 3', "Hank's Closet"]
 
-// Items visibles según entidad + tipo de restock
-export function getItemsFor(entity: Entity, type: RestockType): Item[] {
-  const pool = ITEMS.filter(i => i.in.includes(entity))
-  if (type === 'profundidad') return pool
-  return pool.filter(i => i.priority === 'high')
+const CAFES = [4, 5, 7] // Coffee, Tea, Decaf
+
+// Estándar según entidad + espacio.
+// Piso 1: 1 caja de TODO, excepto cafés = 3 cajas verdes.
+// Hank's Closet: solo Slippers confirmado; el resto hereda Piso 2/3.
+export function getStandard(item: Item, entity: Entity, space?: string | null): Standard | null {
+  if (entity === 'outside') return item.outside ?? null
+  if (space === 'Piso 1') {
+    if (CAFES.includes(item.id)) return { steps: 3, pcsPerStep: 24 }
+    return { steps: 1, pcsPerStep: item.pcsBox }
+  }
+  return item.main ?? null
 }
 
-// Piezas que representa cada unidad visual, según entidad
-export function pcsPerStep(item: Item, entity: Entity): number {
-  const v = entity === 'outside' ? item.pcsPerStepOutside : item.pcsPerStepMain
-  return v ?? item.pcsBox
+// Items visibles según entidad, espacio y tipo de restock
+export function getItemsFor(entity: Entity, type: RestockType, space?: string | null): Item[] {
+  let pool = ITEMS.filter(i => i.in.includes(entity) && getStandard(i, entity, space))
+  if (space === "Hank's Closet") pool = pool.filter(i => i.id === 26)
+  else pool = pool.filter(i => i.id !== 26)
+  if (type === 'urgente') pool = pool.filter(i => i.priority === 'high')
+  return pool
 }
 
-// Lo que FALTA = (steps totales - steps que hay) * piezas por step
-export function missingPcs(item: Item, entity: Entity, stepsPresent: number): number {
-  const missing = Math.max(0, item.steps - stepsPresent)
-  return missing * pcsPerStep(item, entity)
+// Lo que FALTA = (unidades del estándar − unidades presentes) × piezas por unidad
+export function missingPcs(item: Item, entity: Entity, space: string | null, stepsPresent: number): number {
+  const std = getStandard(item, entity, space)
+  if (!std) return 0
+  return Math.max(0, std.steps - stepsPresent) * std.pcsPerStep
 }
 
-// Convertir piezas a CAJAS (preferencia: hablar en cajas para boathouse)
+// Convertir piezas a CAJAS (para el boathouse)
 export function pcsToBoxes(item: Item, pcs: number): { boxes: number; remainderPcs: number } {
-  const boxes = Math.floor(pcs / item.pcsBox)
-  const remainderPcs = pcs % item.pcsBox
-  return { boxes, remainderPcs }
+  return { boxes: Math.floor(pcs / item.pcsBox), remainderPcs: pcs % item.pcsBox }
 }

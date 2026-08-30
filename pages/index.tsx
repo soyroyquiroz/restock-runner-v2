@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
-  LODGES, PISOS, ITEMS, ITEM_BY_ID, getItemsFor,
-  pcsPerStep, missingPcs, pcsToBoxes,
+  LODGES, PISOS, ITEMS, ITEM_BY_ID, getItemsFor, getStandard,
+  missingPcs, pcsToBoxes,
   Entity, RestockType, Item
 } from '@/lib/data'
 
@@ -71,7 +71,7 @@ export default function Home() {
   }
 
   const locationReady = entity === 'outside' ? (lodge !== null && bridge !== null) : (entity === 'main' && piso !== null)
-  const visibleItems = entity && type ? getItemsFor(entity, type) : []
+  const visibleItems = entity && type ? getItemsFor(entity, type, piso) : []
 
   const locationLabel = (e: Entry) =>
     e.entity === 'outside' ? `Lodge ${e.lodge} · Bridge ${e.bridge}` : `${e.piso}`
@@ -88,7 +88,10 @@ export default function Home() {
   function addEntry() {
     if (!entity || !type || !locationReady) return
     const filled: Record<number, number> = {}
-    visibleItems.forEach(i => { filled[i.id] = present[i.id] ?? i.steps })
+    visibleItems.forEach(i => {
+      const std = getStandard(i, entity!, piso)
+      filled[i.id] = present[i.id] ?? (std ? std.steps : 0)
+    })
     const entry: Entry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       entity, lodge: entity === 'outside' ? lodge : null,
@@ -118,7 +121,7 @@ export default function Home() {
     Object.entries(e.present).forEach(([id, steps]) => {
       const item = ITEM_BY_ID[Number(id)]
       if (!item) return
-      const pcs = missingPcs(item, e.entity, steps)
+      const pcs = missingPcs(item, e.entity, e.piso, steps)
       if (pcs > 0) totals[item.id] = (totals[item.id] || 0) + pcs
     })
   })
@@ -163,8 +166,12 @@ export default function Home() {
         <h2 style={h2}>Desglose por espacio ({entries.length})</h2>
         {entries.map(e => {
           const faltantes = Object.entries(e.present)
-            .map(([id, steps]) => ({ item: ITEM_BY_ID[Number(id)], steps }))
-            .filter(x => x.item && x.steps < x.item.steps)
+            .map(([id, steps]) => {
+              const item = ITEM_BY_ID[Number(id)]
+              const std = item ? getStandard(item, e.entity, e.piso) : null
+              return { item, steps, std }
+            })
+            .filter(x => x.item && x.std && x.steps < x.std.steps)
           return (
             <div key={e.id} style={{ ...card, marginBottom: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -173,8 +180,8 @@ export default function Home() {
               </div>
               {faltantes.length === 0 ? (
                 <p style={{ color: C.green, margin: 0, fontSize: 13 }}>Completo</p>
-              ) : faltantes.map(({ item, steps }) => {
-                const missing = item.steps - steps
+              ) : faltantes.map(({ item, steps, std }) => {
+                const missing = std!.steps - steps
                 return (
                   <div key={item.id} style={{ ...row, borderBottom: 'none', padding: '4px 0' }}>
                     <span style={{ fontSize: 13 }}>{item.es}</span>
@@ -273,18 +280,19 @@ export default function Home() {
             Mueve el slider a las unidades que <strong>SÍ hay</strong>. Lo que falta se calcula solo.
           </p>
           {visibleItems.map(item => {
-            const steps = present[item.id] ?? item.steps
-            const pct = Math.round((steps / item.steps) * 100)
-            const missing = item.steps - steps
+            const std = getStandard(item, entity, piso)!
+            const steps = present[item.id] ?? std.steps
+            const pct = Math.round((steps / std.steps) * 100)
+            const missing = std.steps - steps
             const color = pct < 50 ? C.red : pct < 100 ? C.amber : C.green
             return (
               <div key={item.id} style={{ padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
                   <strong>{item.es}</strong>
-                  <span style={{ color }}>{steps} / {item.steps} {item.unitLabelPlural}</span>
+                  <span style={{ color }}>{steps} / {std.steps} {std.steps === 1 ? item.unitLabel : item.unitLabelPlural}</span>
                 </div>
                 <input
-                  type="range" min={0} max={item.steps} step={1} value={steps}
+                  type="range" min={0} max={std.steps} step={1} value={steps}
                   onChange={e => setStep(item.id, Number(e.target.value))}
                   style={{ width: '100%', accentColor: color, marginTop: 6 }}
                 />
@@ -292,7 +300,7 @@ export default function Home() {
                   <span>{pct}% lleno</span>
                   <span style={{ color: missing > 0 ? C.red : C.green }}>
                     {missing > 0
-                      ? `falta ${missing} ${missing > 1 ? item.unitLabelPlural : item.unitLabel} (${missingPcs(item, entity, steps)} pcs)`
+                      ? `falta ${missing} ${missing > 1 ? item.unitLabelPlural : item.unitLabel} (${missingPcs(item, entity, piso, steps)} pcs)`
                       : 'completo'}
                   </span>
                 </div>
