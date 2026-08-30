@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   LODGES, PISOS, ITEMS, ITEM_BY_ID, getItemsFor, getStandard,
-  missingPcs, pcsToBoxes, fmt,
+  missingPcs, pcsToBoxes, fmt, allowsHalf,
   Entity, RestockType, Item
 } from '@/lib/data'
 
@@ -292,7 +292,7 @@ export default function Home() {
                   <span style={{ color }}>{fmt(steps)} / {fmt(std.steps)} {std.steps === 1 ? std.unit : std.unitPlural}</span>
                 </div>
                 <input
-                  type="range" min={0} max={std.steps} step={std.allowHalf ? 0.5 : 1} value={steps}
+                  type="range" min={0} max={std.steps} step={allowsHalf(std) ? 0.5 : 1} value={steps}
                   onChange={e => setStep(item.id, Number(e.target.value))}
                   style={{ width: '100%', accentColor: color, marginTop: 6 }}
                 />

@@ -31,7 +31,7 @@ export interface Item {
 }
 
 const caja = (steps: number, pcsPerStep: number): Standard =>
-  ({ steps, pcsPerStep, unit: 'caja', unitPlural: 'cajas', allowHalf: true })
+  ({ steps, pcsPerStep, unit: 'caja', unitPlural: 'cajas' })
 
 export const ITEMS: Item[] = [
   // ---------- HIGH (entran en URGENTE) ----------
@@ -99,7 +99,7 @@ export const ITEMS: Item[] = [
     main:    caja(1, 50), TODO: 'pcs por caja sin confirmar' },
 
   { id: 19, es: 'Condiment Kit', pcsBox: 240, priority: 'low', in: ['outside','main'],
-    outside: { steps: 1, pcsPerStep: 25, unit: 'bolsa (25 pzs)', unitPlural: 'bolsas (25 pzs)', allowHalf: true },
+    outside: { steps: 1, pcsPerStep: 25, unit: 'bolsa (25 pzs)', unitPlural: 'bolsas (25 pzs)' },
     main:    caja(1, 240) },
 
   { id: 20, es: 'Makeup Wipes', pcsBox: 200, priority: 'low', in: ['outside','main'], outside: caja(1, 200), main: caja(1, 200) },
@@ -107,8 +107,8 @@ export const ITEMS: Item[] = [
   { id: 23, es: 'Pens',         pcsBox: 150, priority: 'low', in: ['outside','main'], outside: caja(1, 150), main: caja(1, 150) },
 
   { id: 22, es: 'Notepads', pcsBox: 30, priority: 'low', in: ['outside','main'],
-    outside: { steps: 1, pcsPerStep: 30, unit: 'pack', unitPlural: 'packs', allowHalf: true },
-    main:    { steps: 4, pcsPerStep: 30, unit: 'pack', unitPlural: 'packs', allowHalf: true } },
+    outside: { steps: 1, pcsPerStep: 30, unit: 'pack', unitPlural: 'packs' },
+    main:    { steps: 4, pcsPerStep: 30, unit: 'pack', unitPlural: 'packs' } },
 
   // ---------- SOLO MAIN HOTEL ----------
   { id: 24, es: 'Toothpaste', pcsBox: 24,  priority: 'low', in: ['main'], main: caja(1, 24) },
@@ -160,6 +160,14 @@ export function missingPcs(item: Item, entity: Entity, space: string | null, ste
 
 export function pcsToBoxes(item: Item, pcs: number): { boxes: number; remainderPcs: number } {
   return { boxes: Math.floor(pcs / item.pcsBox), remainderPcs: pcs % item.pcsBox }
+}
+
+// Unidades que NO se pueden partir a la mitad
+const WHOLE_ONLY = ['botellita', 'pieza']
+
+export function allowsHalf(std: Standard): boolean {
+  if (std.allowHalf !== undefined) return std.allowHalf
+  return !WHOLE_ONLY.includes(std.unit)
 }
 
 // 1.5 -> "1.5", 2 -> "2"
