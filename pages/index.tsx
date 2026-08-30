@@ -1,469 +1,353 @@
-'use client'
 import { useState, useEffect } from 'react'
-import { LODGES, PISOS, ITEMS, getItemsForType } from '@/lib/data'
+import {
+  LODGES, PISOS, ITEMS, ITEM_BY_ID, getItemsFor,
+  pcsPerStep, missingPcs, pcsToBoxes,
+  Entity, RestockType, Item
+} from '@/lib/data'
+
+interface Entry {
+  id: string
+  entity: Entity
+  lodge: number | null
+  piso: string | null
+  bridge: number | null
+  type: RestockType
+  // itemId -> unidades visuales PRESENTES
+  present: Record<number, number>
+}
+
+const C = {
+  ink: '#12211c', line: '#d6ded9', bg: '#f6f7f5', card: '#ffffff',
+  green: '#2f7d5d', red: '#c0392b', amber: '#d68910', blue: '#2a6fb0', gray: '#8a948f',
+}
 
 export default function Home() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [username, setUsername] = useState('')
-  const [tempUsername, setTempUsername] = useState('')
+  const [user, setUser] = useState('')
+  const [tempUser, setTempUser] = useState('')
+  const [view, setView] = useState<'capture' | 'report'>('capture')
 
-  const [entity, setEntity] = useState<'outside' | 'main' | null>(null)
+  const [entity, setEntity] = useState<Entity | null>(null)
   const [lodge, setLodge] = useState<number | null>(null)
   const [piso, setPiso] = useState<string | null>(null)
   const [bridge, setBridge] = useState<number | null>(null)
-  const [restockType, setRestockType] = useState<'profundidad' | 'urgente' | null>(null)
-  const [itemFill, setItemFill] = useState<Record<number, number>>({})
-  const [cart, setCart] = useState<Record<number, { qty: number; unit: string }>>({})
+  const [type, setType] = useState<RestockType | null>(null)
+  const [present, setPresent] = useState<Record<number, number>>({})
+
+  const [entries, setEntries] = useState<Entry[]>([])
 
   useEffect(() => {
-    const saved = localStorage.getItem('rr-user')
-    const savedCart = localStorage.getItem('rr-cart')
-    if (saved) {
-      setIsLoggedIn(true)
-      setUsername(saved)
-    }
-    if (savedCart) {
-      setCart(JSON.parse(savedCart))
-    }
+    const u = localStorage.getItem('rr-user')
+    if (u) setUser(u)
+    const e = localStorage.getItem('rr-entries')
+    if (e) { try { setEntries(JSON.parse(e)) } catch {} }
   }, [])
 
-  const handleLogin = () => {
-    if (tempUsername.trim()) {
-      setUsername(tempUsername)
-      setIsLoggedIn(true)
-      localStorage.setItem('rr-user', tempUsername)
-      setTempUsername('')
-    }
-  }
+  useEffect(() => {
+    localStorage.setItem('rr-entries', JSON.stringify(entries))
+  }, [entries])
 
-  const handleLogout = () => {
-    setIsLoggedIn(false)
-    setUsername('')
-    localStorage.removeItem('rr-user')
-    handleReset()
-  }
-
-  const handleReset = () => {
-    setEntity(null)
-    setLodge(null)
-    setPiso(null)
-    setBridge(null)
-    setRestockType(null)
-    setItemFill({})
-  }
-
-  const handleEntityChange = (e: 'outside' | 'main') => {
-    if (entity === e) return
-    setEntity(e)
-    setLodge(null)
-    setPiso(null)
-    setBridge(null)
-    setRestockType(null)
-    setItemFill({})
-  }
-
-  const handleItemFill = (itemId: number, percent: number) => {
-    setItemFill(prev => ({
-      ...prev,
-      [itemId]: Math.max(0, Math.min(100, percent))
-    }))
-  }
-
-  const calculateQty = (itemId: number, percent: number) => {
-    const item = ITEMS[itemId]
-    if (percent < 30) return Math.ceil((item.pcs_box * percent) / 100)
-    return Math.ceil((item.pcs_box * percent) / 100 / item.pcs_box)
-  }
-
-  const addToCart = (itemId: number) => {
-    const percent = itemFill[itemId] || 0
-    if (percent === 0) return
-    
-    const item = ITEMS[itemId]
-    const qty = calculateQty(itemId, percent)
-    
-    setCart(prev => {
-      const updated = { ...prev, [itemId]: { qty, unit: item.unit } }
-      localStorage.setItem('rr-cart', JSON.stringify(updated))
-      return updated
-    })
-  }
-
-  const removeFromCart = (itemId: number) => {
-    setCart(prev => {
-      const updated = { ...prev }
-      delete updated[itemId]
-      localStorage.setItem('rr-cart', JSON.stringify(updated))
-      return updated
-    })
-  }
-
-  const handleSave = () => {
-    const report = {
-      user: username,
-      entity,
-      lodge: entity === 'outside' ? lodge : null,
-      piso: entity === 'main' ? piso : null,
-      bridge: entity === 'outside' ? bridge : null,
-      restockType,
-      cart,
-      timestamp: new Date().toISOString()
-    }
-    console.log('📊 Reporte guardado:', report)
-    alert(`✅ Reporte de ${username} guardado!\n\nItems en carrito: ${Object.keys(cart).length}`)
-    handleReset()
-    setCart({})
-    localStorage.removeItem('rr-cart')
-  }
-
-  const getGradientColor = (percent: number) => {
-    if (percent < 50) return '#f44336'
-    if (percent < 75) return '#FF9800'
-    return '#4CAF50'
-  }
-
-  if (!isLoggedIn) {
+  // ---------- login ----------
+  if (!user) {
     return (
-      <div style={{ maxWidth: '400px', margin: '100px auto', padding: '20px', fontFamily: 'sans-serif', textAlign: 'center' }}>
-        <h1>🏨 Restock Runner</h1>
-        <p>Sagamore Resort</p>
-        
-        <div style={{ marginTop: '30px', border: '2px solid #333', padding: '20px', borderRadius: '8px', backgroundColor: '#f0f0f0' }}>
-          <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>
-            Tu nombre:
-          </label>
+      <div style={{ maxWidth: 380, margin: '80px auto', padding: 20, fontFamily: 'system-ui, sans-serif', color: C.ink }}>
+        <h1 style={{ fontSize: 26, marginBottom: 4 }}>Restock Runner</h1>
+        <p style={{ color: C.gray, marginTop: 0 }}>Sagamore Resort</p>
+        <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 10, padding: 18, marginTop: 24 }}>
+          <label style={{ fontWeight: 600, fontSize: 14 }}>Tu nombre</label>
           <input
-            type="text"
-            value={tempUsername}
-            onChange={(e) => setTempUsername(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
-            placeholder="Ej: Rodrigo"
-            style={{ width: '100%', padding: '12px', marginBottom: '15px', fontSize: '16px', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+            value={tempUser}
+            onChange={e => setTempUser(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && tempUser.trim()) { setUser(tempUser.trim()); localStorage.setItem('rr-user', tempUser.trim()) } }}
+            placeholder="Rodrigo"
+            style={{ width: '100%', padding: 12, fontSize: 16, marginTop: 8, marginBottom: 14, borderRadius: 8, border: `1px solid ${C.line}`, boxSizing: 'border-box' }}
           />
           <button
-            onClick={handleLogin}
-            style={{
-              width: '100%',
-              padding: '12px',
-              fontSize: '18px',
-              backgroundColor: '#4CAF50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontWeight: 'bold'
-            }}
-          >
-            🚀 Empezar
-          </button>
+            onClick={() => { if (tempUser.trim()) { setUser(tempUser.trim()); localStorage.setItem('rr-user', tempUser.trim()) } }}
+            style={btn(C.green)}
+          >Entrar</button>
         </div>
       </div>
     )
   }
 
-  const visibleItems = restockType ? getItemsForType(restockType) : Object.entries(ITEMS)
+  const locationReady = entity === 'outside' ? (lodge !== null && bridge !== null) : (entity === 'main' && piso !== null)
+  const visibleItems = entity && type ? getItemsFor(entity, type) : []
 
-  return (
-    <div style={{ maxWidth: '700px', margin: '0 auto', padding: '15px', fontFamily: 'sans-serif' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #333', paddingBottom: '10px' }}>
-        <h1 style={{ margin: 0 }}>🏨 Restock Runner</h1>
-        <div>
-          <span style={{ marginRight: '15px', fontWeight: 'bold' }}>👤 {username}</span>
-          <button
-            onClick={handleLogout}
-            style={{
-              padding: '8px 12px',
-              backgroundColor: '#f44336',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '12px'
-            }}
-          >
-            Logout
-          </button>
+  const locationLabel = (e: Entry) =>
+    e.entity === 'outside' ? `Lodge ${e.lodge} · Bridge ${e.bridge}` : `${e.piso}`
+
+  const currentKey = entity === 'outside' ? `o-${lodge}-${bridge}` : `m-${piso}`
+  const alreadyCaptured = entries.filter(e =>
+    (e.entity === 'outside' ? `o-${e.lodge}-${e.bridge}` : `m-${e.piso}`) === currentKey
+  ).length
+
+  function setStep(itemId: number, steps: number) {
+    setPresent(p => ({ ...p, [itemId]: steps }))
+  }
+
+  function addEntry() {
+    if (!entity || !type || !locationReady) return
+    const filled: Record<number, number> = {}
+    visibleItems.forEach(i => { filled[i.id] = present[i.id] ?? i.steps })
+    const entry: Entry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      entity, lodge: entity === 'outside' ? lodge : null,
+      piso: entity === 'main' ? piso : null,
+      bridge: entity === 'outside' ? bridge : null,
+      type, present: filled,
+    }
+    setEntries(prev => [...prev, entry])
+    // Mantiene lodge y tipo — solo limpia bridge e items para seguir con el siguiente
+    setBridge(null)
+    setPresent({})
+  }
+
+  function removeEntry(id: string) {
+    setEntries(prev => prev.filter(e => e.id !== id))
+  }
+
+  function clearAll() {
+    if (!confirm('¿Borrar todo el reporte acumulado?')) return
+    setEntries([])
+    setBridge(null); setPresent({}); setType(null)
+  }
+
+  // ---------- totales ----------
+  const totals: Record<number, number> = {}   // itemId -> piezas faltantes
+  entries.forEach(e => {
+    Object.entries(e.present).forEach(([id, steps]) => {
+      const item = ITEM_BY_ID[Number(id)]
+      if (!item) return
+      const pcs = missingPcs(item, e.entity, steps)
+      if (pcs > 0) totals[item.id] = (totals[item.id] || 0) + pcs
+    })
+  })
+  const totalItems = Object.keys(totals).length
+
+  // ================= REPORT VIEW =================
+  if (view === 'report') {
+    return (
+      <div style={wrap}>
+        <Header user={user} onLogout={() => { localStorage.removeItem('rr-user'); setUser('') }} />
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <button onClick={() => setView('capture')} style={btnGhost}>← Volver a capturar</button>
         </div>
-      </div>
 
-      {/* STEP 1: Entity Selection */}
-      <section style={{ marginBottom: '15px', border: '2px solid #333', padding: '12px', borderRadius: '6px', backgroundColor: '#f0f0f0' }}>
-        <h3>📍 ¿Dónde?</h3>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={() => handleEntityChange('outside')}
-            style={{
-              flex: 1,
-              padding: '12px',
-              backgroundColor: entity === 'outside' ? '#4CAF50' : '#ddd',
-              color: entity === 'outside' ? 'white' : 'black',
-              cursor: 'pointer',
-              border: entity === 'outside' ? '2px solid #2e7d32' : 'none',
-              borderRadius: '4px',
-              fontWeight: 'bold',
-              fontSize: '14px'
-            }}
-          >
-            🏘️ Outside
-          </button>
-          <button
-            onClick={() => handleEntityChange('main')}
-            style={{
-              flex: 1,
-              padding: '12px',
-              backgroundColor: entity === 'main' ? '#4CAF50' : '#ddd',
-              color: entity === 'main' ? 'white' : 'black',
-              cursor: 'pointer',
-              border: entity === 'main' ? '2px solid #2e7d32' : 'none',
-              borderRadius: '4px',
-              fontWeight: 'bold',
-              fontSize: '14px'
-            }}
-          >
-            🏨 Main
-          </button>
-        </div>
-      </section>
-
-      {/* STEP 2: Location */}
-      {entity === 'outside' && (
-        <section style={{ marginBottom: '15px', border: '2px solid #2196F3', padding: '12px', borderRadius: '6px', backgroundColor: '#e3f2fd' }}>
-          <h3>🏠 Lodge & Bridge</h3>
-          <select
-            value={lodge || ''}
-            onChange={(e) => setLodge(e.target.value ? Number(e.target.value) : null)}
-            style={{ width: '100%', padding: '10px', marginBottom: '10px', fontSize: '14px', borderRadius: '4px', border: '1px solid #2196F3' }}
-          >
-            <option value="">-- Selecciona Lodge --</option>
-            {LODGES.map((l) => (
-              <option key={l.num} value={l.num}>{l.name}</option>
-            ))}
-          </select>
-
-          {lodge && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
-              {Array.from({ length: LODGES.find(l => l.num === lodge)?.bridges || 0 }, (_, i) => (
-                <button
-                  key={i + 1}
-                  onClick={() => setBridge(i + 1)}
-                  style={{
-                    padding: '10px',
-                    backgroundColor: bridge === i + 1 ? '#2196F3' : '#e0e0e0',
-                    color: bridge === i + 1 ? 'white' : 'black',
-                    cursor: 'pointer',
-                    border: bridge === i + 1 ? '2px solid #1565c0' : 'none',
-                    borderRadius: '4px',
-                    fontWeight: 'bold',
-                    fontSize: '12px'
-                  }}
-                >
-                  B{i + 1}
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {entity === 'main' && (
-        <section style={{ marginBottom: '15px', border: '2px solid #9C27B0', padding: '12px', borderRadius: '6px', backgroundColor: '#f3e5f5' }}>
-          <h3>🏗️ Piso</h3>
-          <select
-            value={piso || ''}
-            onChange={(e) => setPiso(e.target.value || null)}
-            style={{ width: '100%', padding: '10px', fontSize: '14px', borderRadius: '4px', border: '1px solid #9C27B0' }}
-          >
-            <option value="">-- Selecciona Piso --</option>
-            {PISOS.map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-        </section>
-      )}
-
-      {/* STEP 3: Restock Type */}
-      {entity && ((entity === 'outside' && bridge) || (entity === 'main' && piso)) && (
-        <section style={{ marginBottom: '15px', border: '2px solid #FF9800', padding: '12px', borderRadius: '6px', backgroundColor: '#fff3e0' }}>
-          <h3>📋 Tipo</h3>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              onClick={() => setRestockType('profundidad')}
-              style={{
-                flex: 1,
-                padding: '10px',
-                backgroundColor: restockType === 'profundidad' ? '#FF9800' : '#ddd',
-                color: restockType === 'profundidad' ? 'white' : 'black',
-                cursor: 'pointer',
-                border: restockType === 'profundidad' ? '2px solid #e65100' : 'none',
-                borderRadius: '4px',
-                fontSize: '12px',
-                fontWeight: 'bold'
-              }}
-            >
-              📦 Profundidad
-            </button>
-            <button
-              onClick={() => setRestockType('urgente')}
-              style={{
-                flex: 1,
-                padding: '10px',
-                backgroundColor: restockType === 'urgente' ? '#FF9800' : '#ddd',
-                color: restockType === 'urgente' ? 'white' : 'black',
-                cursor: 'pointer',
-                border: restockType === 'urgente' ? '2px solid #e65100' : 'none',
-                borderRadius: '4px',
-                fontSize: '12px',
-                fontWeight: 'bold'
-              }}
-            >
-              🚨 Urgente
-            </button>
+        <h2 style={h2}>Sacar del Boathouse</h2>
+        {totalItems === 0 ? (
+          <p style={{ color: C.gray }}>Todavía no hay nada faltante registrado.</p>
+        ) : (
+          <div style={card}>
+            {Object.entries(totals).map(([id, pcs]) => {
+              const item = ITEM_BY_ID[Number(id)]
+              const { boxes, remainderPcs } = pcsToBoxes(item, pcs)
+              return (
+                <div key={id} style={row}>
+                  <span style={{ fontWeight: 600 }}>{item.es}</span>
+                  <span style={{ textAlign: 'right' }}>
+                    <strong style={{ color: C.green, fontSize: 16 }}>
+                      {boxes > 0 ? `${boxes} caja${boxes > 1 ? 's' : ''}` : '—'}
+                    </strong>
+                    {remainderPcs > 0 && (
+                      <span style={{ color: C.gray, fontSize: 12, display: 'block' }}>
+                        + {remainderPcs} pcs sueltas
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )
+            })}
           </div>
-        </section>
-      )}
+        )}
 
-      {/* STEP 4: Items & Cart */}
-      {restockType && (
-        <>
-          <section style={{ marginBottom: '15px', border: '2px solid #4CAF50', padding: '12px', borderRadius: '6px', backgroundColor: '#e8f5e9' }}>
-            <h3>🎚️ Items ({visibleItems.length})</h3>
-            <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-              {visibleItems.map(([id, item]) => {
-                const numId = Number(id)
-                const percent = itemFill[numId] || 0
+        <h2 style={h2}>Desglose por espacio ({entries.length})</h2>
+        {entries.map(e => {
+          const faltantes = Object.entries(e.present)
+            .map(([id, steps]) => ({ item: ITEM_BY_ID[Number(id)], steps }))
+            .filter(x => x.item && x.steps < x.item.steps)
+          return (
+            <div key={e.id} style={{ ...card, marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <strong>{locationLabel(e)}</strong>
+                <span style={{ fontSize: 11, color: C.gray, textTransform: 'uppercase' }}>{e.type}</span>
+              </div>
+              {faltantes.length === 0 ? (
+                <p style={{ color: C.green, margin: 0, fontSize: 13 }}>Completo</p>
+              ) : faltantes.map(({ item, steps }) => {
+                const missing = item.steps - steps
                 return (
-                  <div key={id} style={{ marginBottom: '12px', paddingBottom: '10px', borderBottom: '1px solid #ccc' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
-                      <label style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.name_es}</label>
-                      <span style={{ fontSize: '12px', color: '#666' }}>{percent}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={percent}
-                      onChange={(e) => handleItemFill(numId, Number(e.target.value))}
-                      style={{ width: '100%', cursor: 'pointer' }}
-                    />
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                      <div style={{
-                        flex: 1,
-                        height: '18px',
-                        backgroundColor: '#e0e0e0',
-                        borderRadius: '3px',
-                        overflow: 'hidden'
-                      }}>
-                        <div style={{
-                          height: '100%',
-                          width: `${percent}%`,
-                          backgroundColor: getGradientColor(percent),
-                          transition: 'width 0.2s'
-                        }} />
-                      </div>
-                      {percent > 0 && (
-                        <button
-                          onClick={() => addToCart(numId)}
-                          style={{
-                            padding: '4px 10px',
-                            backgroundColor: '#2196F3',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '3px',
-                            cursor: 'pointer',
-                            fontSize: '11px',
-                            fontWeight: 'bold'
-                          }}
-                        >
-                          + Carrito
-                        </button>
-                      )}
-                    </div>
+                  <div key={item.id} style={{ ...row, borderBottom: 'none', padding: '4px 0' }}>
+                    <span style={{ fontSize: 13 }}>{item.es}</span>
+                    <span style={{ fontSize: 13, color: C.red }}>
+                      falta {missing} {missing > 1 ? item.unitLabelPlural : item.unitLabel}
+                    </span>
                   </div>
                 )
               })}
+              <button onClick={() => removeEntry(e.id)} style={{ ...btnGhost, marginTop: 8, fontSize: 12, color: C.red, borderColor: C.line }}>Quitar</button>
             </div>
-          </section>
+          )
+        })}
 
-          {/* CART */}
-          <section style={{ marginBottom: '15px', border: '2px solid #FF5722', padding: '12px', borderRadius: '6px', backgroundColor: '#ffebee' }}>
-            <h3>🛒 Carrito ({Object.keys(cart).length})</h3>
-            {Object.keys(cart).length === 0 ? (
-              <p style={{ fontSize: '12px', color: '#666' }}>Vacío - Agrega items con "Carrito"</p>
-            ) : (
-              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                {Object.entries(cart).map(([itemId, { qty, unit }]) => {
-                  const item = ITEMS[Number(itemId)]
-                  return (
-                    <div key={itemId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px', backgroundColor: '#fff', borderRadius: '4px', marginBottom: '6px' }}>
-                      <div>
-                        <p style={{ margin: '0 0 3px 0', fontWeight: 'bold', fontSize: '13px' }}>{item.name_es}</p>
-                        <p style={{ margin: 0, fontSize: '11px', color: '#666' }}>
-                          {qty > 1 ? `${qty} ${unit}s` : `${qty} ${unit}`}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => removeFromCart(Number(itemId))}
-                        style={{
-                          padding: '4px 8px',
-                          backgroundColor: '#f44336',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '3px',
-                          cursor: 'pointer',
-                          fontSize: '11px'
-                        }}
-                      >
-                        ❌
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </section>
+        {entries.length > 0 && (
+          <button onClick={clearAll} style={{ ...btn(C.red), marginTop: 12 }}>Cerrar y borrar reporte</button>
+        )}
+      </div>
+    )
+  }
 
-          {/* Save Button */}
-          {Object.keys(cart).length > 0 && (
-            <button
-              onClick={handleSave}
-              style={{
-                width: '100%',
-                padding: '14px',
-                fontSize: '16px',
-                backgroundColor: '#4CAF50',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontWeight: 'bold',
-                marginBottom: '10px',
-                boxShadow: '0 4px 6px rgba(0,0,0,0.2)'
-              }}
-            >
-              ✅ Guardar Reporte
-            </button>
+  // ================= CAPTURE VIEW =================
+  return (
+    <div style={wrap}>
+      <Header user={user} onLogout={() => { localStorage.removeItem('rr-user'); setUser('') }} />
+
+      <button onClick={() => setView('report')} style={{ ...btn(C.blue), marginBottom: 16 }}>
+        Ver reporte ({entries.length} espacio{entries.length === 1 ? '' : 's'})
+      </button>
+
+      {/* 1. Entidad */}
+      <Section title="1 · Dónde">
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Pick label="Outside (Lodges)" active={entity === 'outside'} onClick={() => { setEntity('outside'); setPiso(null); setBridge(null); setPresent({}) }} />
+          <Pick label="Main Hotel" active={entity === 'main'} onClick={() => { setEntity('main'); setLodge(null); setBridge(null); setPresent({}) }} />
+        </div>
+      </Section>
+
+      {/* 2. Ubicación */}
+      {entity === 'outside' && (
+        <Section title="2 · Lodge y Bridge">
+          <select value={lodge ?? ''} onChange={e => { setLodge(e.target.value ? Number(e.target.value) : null); setBridge(null) }} style={select}>
+            <option value="">Selecciona lodge</option>
+            {LODGES.map(l => <option key={l.num} value={l.num}>{l.name}</option>)}
+          </select>
+          {lodge && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginTop: 10 }}>
+              {Array.from({ length: LODGES.find(l => l.num === lodge)!.bridges }, (_, i) => {
+                const n = i + 1
+                const done = entries.some(e => e.lodge === lodge && e.bridge === n)
+                return (
+                  <button key={n} onClick={() => { setBridge(n); setPresent({}) }}
+                    style={{
+                      padding: '10px 4px', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                      border: `1px solid ${bridge === n ? C.blue : C.line}`,
+                      background: bridge === n ? C.blue : (done ? '#e8f2ea' : C.card),
+                      color: bridge === n ? '#fff' : C.ink,
+                    }}>
+                    B{n}{done ? ' ✓' : ''}
+                  </button>
+                )
+              })}
+            </div>
           )}
-        </>
+        </Section>
       )}
 
-      {entity && (
-        <button
-          onClick={handleReset}
-          style={{
-            width: '100%',
-            padding: '10px',
-            fontSize: '13px',
-            backgroundColor: '#f44336',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontWeight: 'bold'
-          }}
-        >
-          🔄 Reiniciar
-        </button>
+      {entity === 'main' && (
+        <Section title="2 · Piso">
+          <select value={piso ?? ''} onChange={e => { setPiso(e.target.value || null); setPresent({}) }} style={select}>
+            <option value="">Selecciona piso</option>
+            {PISOS.map(p => <option key={p} value={p}>{p}{entries.some(e => e.piso === p) ? ' ✓' : ''}</option>)}
+          </select>
+        </Section>
+      )}
+
+      {/* 3. Tipo */}
+      {locationReady && (
+        <Section title="3 · Tipo de restock">
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Pick label="Profundidad" sub="todos los items" active={type === 'profundidad'} onClick={() => setType('profundidad')} />
+            <Pick label="Urgente" sub="solo críticos" active={type === 'urgente'} onClick={() => setType('urgente')} />
+          </div>
+          {alreadyCaptured > 0 && (
+            <p style={{ fontSize: 12, color: C.amber, marginBottom: 0 }}>
+              Ya registraste este espacio {alreadyCaptured} vez{alreadyCaptured > 1 ? 'es' : ''} en este reporte. Puedes volver a registrarlo.
+            </p>
+          )}
+        </Section>
+      )}
+
+      {/* 4. Items */}
+      {locationReady && type && entity && (
+        <Section title={`4 · Qué hay (${visibleItems.length} items)`}>
+          <p style={{ fontSize: 12, color: C.gray, marginTop: -4 }}>
+            Mueve el slider a las unidades que <strong>SÍ hay</strong>. Lo que falta se calcula solo.
+          </p>
+          {visibleItems.map(item => {
+            const steps = present[item.id] ?? item.steps
+            const pct = Math.round((steps / item.steps) * 100)
+            const missing = item.steps - steps
+            const color = pct < 50 ? C.red : pct < 100 ? C.amber : C.green
+            return (
+              <div key={item.id} style={{ padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
+                  <strong>{item.es}</strong>
+                  <span style={{ color }}>{steps} / {item.steps} {item.unitLabelPlural}</span>
+                </div>
+                <input
+                  type="range" min={0} max={item.steps} step={1} value={steps}
+                  onChange={e => setStep(item.id, Number(e.target.value))}
+                  style={{ width: '100%', accentColor: color, marginTop: 6 }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.gray }}>
+                  <span>{pct}% lleno</span>
+                  <span style={{ color: missing > 0 ? C.red : C.green }}>
+                    {missing > 0
+                      ? `falta ${missing} ${missing > 1 ? item.unitLabelPlural : item.unitLabel} (${missingPcs(item, entity, steps)} pcs)`
+                      : 'completo'}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+
+          <button onClick={addEntry} style={{ ...btn(C.green), marginTop: 16 }}>
+            Agregar al reporte y seguir
+          </button>
+        </Section>
       )}
     </div>
+  )
+}
+
+// ---------- UI helpers ----------
+const wrap: React.CSSProperties = { maxWidth: 620, margin: '0 auto', padding: 16, fontFamily: 'system-ui, sans-serif', color: C.ink, background: C.bg, minHeight: '100vh' }
+const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.line}`, borderRadius: 10, padding: 14 }
+const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${C.line}` }
+const h2: React.CSSProperties = { fontSize: 15, textTransform: 'uppercase', letterSpacing: 0.5, color: C.gray, marginTop: 22, marginBottom: 8 }
+const select: React.CSSProperties = { width: '100%', padding: 11, fontSize: 15, borderRadius: 8, border: `1px solid ${C.line}`, background: '#fff', boxSizing: 'border-box' }
+const btnGhost: React.CSSProperties = { padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.line}`, background: '#fff', cursor: 'pointer', fontSize: 13 }
+function btn(bg: string): React.CSSProperties {
+  return { width: '100%', padding: 13, fontSize: 15, fontWeight: 600, background: bg, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }
+}
+
+function Header({ user, onLogout }: { user: string; onLogout: () => void }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, borderBottom: `1px solid ${C.line}`, marginBottom: 16 }}>
+      <strong style={{ fontSize: 18 }}>Restock Runner</strong>
+      <span style={{ fontSize: 13, color: C.gray }}>
+        {user} · <button onClick={onLogout} style={{ background: 'none', border: 'none', color: C.red, cursor: 'pointer', fontSize: 13, padding: 0 }}>salir</button>
+      </span>
+    </div>
+  )
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ ...card, marginBottom: 12 }}>
+      <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.6, color: C.gray, marginBottom: 10 }}>{title}</div>
+      {children}
+    </div>
+  )
+}
+
+function Pick({ label, sub, active, onClick }: { label: string; sub?: string; active: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} style={{
+      flex: 1, padding: '12px 8px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14,
+      border: `1px solid ${active ? C.green : C.line}`, background: active ? C.green : '#fff', color: active ? '#fff' : C.ink,
+    }}>
+      {label}
+      {sub && <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.8 }}>{sub}</div>}
+    </button>
   )
 }
