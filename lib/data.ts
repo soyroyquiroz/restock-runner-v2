@@ -1,16 +1,16 @@
-export const ITEMS: Record<number, { name_es: string; name_en: string; pcs_box: number; unit: string }> = {
-  1: { name_es: 'Toilet Paper', name_en: 'Toilet Paper', pcs_box: 60, unit: 'hileras' },
-  2: { name_es: 'Kleenex', name_en: 'Kleenex', pcs_box: 30, unit: 'piezas' },
-  3: { name_es: 'Paper Towel', name_en: 'Paper Towel', pcs_box: 30, unit: 'hileras' },
-  4: { name_es: 'Soap', name_en: 'Soap', pcs_box: 200, unit: 'bin' },
-  5: { name_es: 'Coffee Pods', name_en: 'Coffee Pods', pcs_box: 100, unit: 'caja' },
-  6: { name_es: 'Tea Pods', name_en: 'Tea Pods', pcs_box: 100, unit: 'caja' },
-  7: { name_es: 'Decaf Pods', name_en: 'Decaf Pods', pcs_box: 100, unit: 'caja' },
-  8: { name_es: 'Water', name_en: 'Water', pcs_box: 24, unit: 'case' },
-  9: { name_es: 'Vanity Kit', name_en: 'Vanity Kit', pcs_box: 100, unit: 'bin' },
-  10: { name_es: 'Coffee Cups', name_en: 'Coffee Cups', pcs_box: 400, unit: 'sleeve' },
-  11: { name_es: 'Shower Caps', name_en: 'Shower Caps', pcs_box: 100, unit: 'bin' },
-  12: { name_es: 'Laundry Bags', name_en: 'Laundry Bags', pcs_box: 1, unit: 'bolsa' },
+export const ITEMS: Record<number, { name_es: string; name_en: string; pcs_box: number; unit: string; priority: 'high' | 'medium' | 'low' }> = {
+  1: { name_es: 'Toilet Paper', name_en: 'Toilet Paper', pcs_box: 60, unit: 'hileras', priority: 'high' },
+  2: { name_es: 'Kleenex', name_en: 'Kleenex', pcs_box: 30, unit: 'piezas', priority: 'medium' },
+  3: { name_es: 'Paper Towel', name_en: 'Paper Towel', pcs_box: 30, unit: 'hileras', priority: 'high' },
+  4: { name_es: 'Soap', name_en: 'Soap', pcs_box: 200, unit: 'bin', priority: 'high' },
+  5: { name_es: 'Coffee Pods', name_en: 'Coffee Pods', pcs_box: 100, unit: 'caja', priority: 'high' },
+  6: { name_es: 'Tea Pods', name_en: 'Tea Pods', pcs_box: 100, unit: 'caja', priority: 'high' },
+  7: { name_es: 'Decaf Pods', name_en: 'Decaf Pods', pcs_box: 100, unit: 'caja', priority: 'medium' },
+  8: { name_es: 'Water', name_en: 'Water', pcs_box: 24, unit: 'case', priority: 'high' },
+  9: { name_es: 'Vanity Kit', name_en: 'Vanity Kit', pcs_box: 100, unit: 'bin', priority: 'medium' },
+  10: { name_es: 'Coffee Cups', name_en: 'Coffee Cups', pcs_box: 400, unit: 'sleeve', priority: 'medium' },
+  11: { name_es: 'Shower Caps', name_en: 'Shower Caps', pcs_box: 100, unit: 'bin', priority: 'medium' },
+  12: { name_es: 'Laundry Bags', name_en: 'Laundry Bags', pcs_box: 1, unit: 'bolsa', priority: 'medium' },
 }
 
 export const LODGES = [
@@ -25,3 +25,11 @@ export const LODGES = [
 ]
 
 export const PISOS = ['Piso 1', 'Piso 2', 'Piso 3', "Hank's Closet"]
+
+export const getItemsForType = (type: 'profundidad' | 'urgente') => {
+  const allItems = Object.entries(ITEMS)
+  if (type === 'profundidad') {
+    return allItems
+  }
+  return allItems.filter(([_, item]) => item.priority === 'high')
+}
