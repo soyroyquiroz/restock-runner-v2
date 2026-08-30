@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   LODGES, PISOS, ITEMS, ITEM_BY_ID, getItemsFor, getStandard,
-  missingPcs, pcsToBoxes,
+  missingPcs, pcsToBoxes, fmt,
   Entity, RestockType, Item
 } from '@/lib/data'
 
@@ -186,7 +186,7 @@ export default function Home() {
                   <div key={item.id} style={{ ...row, borderBottom: 'none', padding: '4px 0' }}>
                     <span style={{ fontSize: 13 }}>{item.es}</span>
                     <span style={{ fontSize: 13, color: C.red }}>
-                      falta {missing} {missing > 1 ? item.unitLabelPlural : item.unitLabel}
+                      falta {fmt(missing)} {missing > 1 ? std!.unitPlural : std!.unit}
                     </span>
                   </div>
                 )
@@ -289,10 +289,10 @@ export default function Home() {
               <div key={item.id} style={{ padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
                   <strong>{item.es}</strong>
-                  <span style={{ color }}>{steps} / {std.steps} {std.steps === 1 ? item.unitLabel : item.unitLabelPlural}</span>
+                  <span style={{ color }}>{fmt(steps)} / {fmt(std.steps)} {std.steps === 1 ? std.unit : std.unitPlural}</span>
                 </div>
                 <input
-                  type="range" min={0} max={std.steps} step={1} value={steps}
+                  type="range" min={0} max={std.steps} step={std.allowHalf ? 0.5 : 1} value={steps}
                   onChange={e => setStep(item.id, Number(e.target.value))}
                   style={{ width: '100%', accentColor: color, marginTop: 6 }}
                 />
@@ -300,7 +300,7 @@ export default function Home() {
                   <span>{pct}% lleno</span>
                   <span style={{ color: missing > 0 ? C.red : C.green }}>
                     {missing > 0
-                      ? `falta ${missing} ${missing > 1 ? item.unitLabelPlural : item.unitLabel} (${missingPcs(item, entity, piso, steps)} pcs)`
+                      ? `falta ${fmt(missing)} ${missing > 1 ? std.unitPlural : std.unit} (${missingPcs(item, entity, piso, steps)} pcs)`
                       : 'completo'}
                   </span>
                 </div>
