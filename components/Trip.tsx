@@ -1,124 +1,88 @@
 import { useState, useEffect, useCallback } from 'react'
 import { ITEM_BY_ID, pcsToBoxes, fmt } from '@/lib/data'
-import {
-  supabase, Runner, SpaceStatusRow, Trip, TripStop, TripStopItem, TripLoadItem,
-  spaceLabel, routeSort,
-} from '@/lib/supabase'
+import { Runner, SpaceStatusRow, Trip, TripStop, TripStopItem, TripLoadItem, spaceLabel, routeSort } from '@/lib/types'
+import { api } from '@/lib/api'
 import { C, card, row, btn, btnGhost, sectionLabel, Section, Check } from '@/lib/ui'
 
 export default function TripSection({ runner }: { runner: Runner }) {
   const [trip, setTrip] = useState<Trip | null>(null)
+  const [others, setOthers] = useState<Trip[]>([])
   const [loading, setLoading] = useState(true)
 
-  const loadTrip = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase.from('trips').select('*')
-      .eq('runner_id', runner.id).neq('status', 'completo')
-      .order('created_at', { ascending: false }).limit(1)
-    setTrip((data?.[0] as Trip) ?? null)
+    try {
+      const r = await api.get('/api/trips')
+      setTrip(r.trip); setOthers(r.others ?? [])
+    } catch {}
     setLoading(false)
-  }, [runner.id])
-
-  useEffect(() => { loadTrip() }, [loadTrip])
+  }, [])
+  useEffect(() => { load() }, [load])
 
   if (loading) return <p style={{ color: C.gray }}>Cargando…</p>
-  if (!trip) return <BuildTrip runner={runner} onCreated={loadTrip} />
-  if (trip.status === 'cargando') return <LoadCart trip={trip} onReady={loadTrip} onCancel={loadTrip} />
-  return <Route trip={trip} onDone={loadTrip} />
+
+  return (
+    <>
+      {!trip && <BuildTrip onCreated={load} />}
+      {trip?.status === 'cargando' && <LoadCart trip={trip} reload={load} />}
+      {trip?.status === 'entregando' && <Route trip={trip} reload={load} />}
+
+      {others.length > 0 && (
+        <Section title={`Viajes abiertos de otros (${others.length})`}>
+          {others.map(t => (
+            <div key={t.id} style={row}>
+              <span>{t.runner_name} <span style={{ fontSize: 12, color: C.gray }}>{t.status}</span></span>
+              <button onClick={async () => {
+                if (!confirm(`¿Cerrar el viaje de ${t.runner_name}?`)) return
+                await api.post(`/api/trips/${t.id}`, { action: 'close' }); load()
+              }} style={{ ...btnGhost, fontSize: 12 }}>Cerrar</button>
+            </div>
+          ))}
+        </Section>
+      )}
+    </>
+  )
 }
 
-// ---------- PASO 1: elegir bridges del viaje ----------
-function BuildTrip({ runner, onCreated }: { runner: Runner; onCreated: () => void }) {
+function BuildTrip({ onCreated }: { onCreated: () => void }) {
   const [rows, setRows] = useState<SpaceStatusRow[]>([])
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
 
-  useEffect(() => {
-    supabase.from('space_status').select('*').gt('missing_pcs', 0)
-      .then(({ data }) => setRows((data ?? []) as SpaceStatusRow[]))
-  }, [])
+  useEffect(() => { api.get('/api/spaces').then(r => setRows(r.spaces)).catch(() => {}) }, [])
 
   const spaces = Object.values(
     rows.reduce((acc: Record<string, SpaceStatusRow[]>, r) => { (acc[r.space_key] ||= []).push(r); return acc }, {})
   ).sort((a, b) => routeSort(a[0], b[0]))
 
-  function toggle(key: string) {
-    setPicked(p => { const n = new Set(p); n.has(key) ? n.delete(key) : n.add(key); return n })
-  }
-
   async function create() {
     if (picked.size === 0 || busy) return
     setBusy(true); setMsg('')
-
-    const chosen = spaces.filter(g => picked.has(g[0].space_key)).sort((a, b) => routeSort(a[0], b[0]))
-
-    const { data: trip, error: e1 } = await supabase.from('trips')
-      .insert({ runner_id: runner.id, runner_name: runner.name, status: 'cargando' })
-      .select('id').single()
-    if (e1 || !trip) { setMsg('No se pudo crear el viaje: ' + (e1?.message ?? '')); setBusy(false); return }
-
-    // Paradas en orden de ruta
-    const stopsPayload = chosen.map((g, i) => ({
-      trip_id: trip.id, space_key: g[0].space_key, entity: g[0].entity,
-      lodge_num: g[0].lodge_num, bridge_num: g[0].bridge_num, space_name: g[0].space_name,
-      sort_order: i,
-    }))
-    const { data: stops, error: e2 } = await supabase.from('trip_stops').insert(stopsPayload).select('id,space_key')
-    if (e2 || !stops) { setMsg('Error al crear paradas: ' + (e2?.message ?? '')); setBusy(false); return }
-
-    const stopId: Record<string, string> = Object.fromEntries(stops.map((s: any) => [s.space_key, s.id]))
-
-    // Qué baja en cada parada
-    const stopItems = chosen.flatMap(g => g.map(r => ({
-      stop_id: stopId[r.space_key], trip_id: trip.id,
-      item_id: r.item_id, item_name: r.item_name,
-      units: Number(r.steps_standard) - Number(r.steps_present),
-      steps_standard: Number(r.steps_standard),
-      pcs: r.missing_pcs, delivered: false,
-    })))
-    const { error: e3 } = await supabase.from('trip_stop_items').insert(stopItems)
-    if (e3) { setMsg('Error al armar las paradas: ' + e3.message); setBusy(false); return }
-
-    // Lista de picking consolidada del boathouse
-    const agg: Record<number, { name: string; pcs: number }> = {}
-    stopItems.forEach(si => {
-      agg[si.item_id] ||= { name: si.item_name, pcs: 0 }
-      agg[si.item_id].pcs += si.pcs
-    })
-    const loadItems = Object.entries(agg).map(([id, v]) => {
-      const item = ITEM_BY_ID[Number(id)]
-      const { boxes, remainderPcs } = item ? pcsToBoxes(item, v.pcs) : { boxes: 0, remainderPcs: v.pcs }
-      return { trip_id: trip.id, item_id: Number(id), item_name: v.name, total_pcs: v.pcs, boxes, remainder_pcs: remainderPcs, loaded: false }
-    })
-    const { error: e4 } = await supabase.from('trip_load_items').insert(loadItems)
-    if (e4) { setMsg('Error al armar la lista de carga: ' + e4.message); setBusy(false); return }
-
-    onCreated()
+    try {
+      await api.post('/api/trips', { spaceKeys: [...picked] })
+      onCreated()
+    } catch (e: any) { setMsg(e.message); setBusy(false) }
   }
 
   return (
     <>
       <Section title="Paso 1 · Elige los bridges de este viaje">
-        {spaces.length === 0 && (
-          <p style={{ color: C.gray, margin: 0 }}>
-            No hay faltantes registrados. Haz primero la ronda de inventario.
-          </p>
-        )}
+        {spaces.length === 0 && <p style={{ color: C.gray, margin: 0 }}>No hay faltantes. Haz primero la ronda de inventario.</p>}
         {spaces.map(g => {
           const head = g[0]
-          const totalPcs = g.reduce((s, r) => s + r.missing_pcs, 0)
+          const on = picked.has(head.space_key)
           return (
-            <Check key={head.space_key} on={picked.has(head.space_key)} onClick={() => toggle(head.space_key)}>
+            <Check key={head.space_key} on={on} onClick={() =>
+              setPicked(p => { const n = new Set(p); on ? n.delete(head.space_key) : n.add(head.space_key); return n })}>
               <strong>{spaceLabel(head)}</strong>
               <div style={{ fontSize: 12, color: C.gray }}>
-                {g.length} item{g.length === 1 ? '' : 's'} · {totalPcs} pzs
+                {g.length} item{g.length === 1 ? '' : 's'} · {g.reduce((s, r) => s + r.missing_pcs, 0)} pzs
               </div>
             </Check>
           )
         })}
       </Section>
-
       {picked.size > 0 && (
         <>
           <button onClick={create} disabled={busy} style={btn(busy ? C.gray : C.green)}>
@@ -131,35 +95,19 @@ function BuildTrip({ runner, onCreated }: { runner: Runner; onCreated: () => voi
   )
 }
 
-// ---------- PASO 2: cargar el carrito ----------
-function LoadCart({ trip, onReady, onCancel }: { trip: Trip; onReady: () => void; onCancel: () => void }) {
+function LoadCart({ trip, reload }: { trip: Trip; reload: () => void }) {
   const [items, setItems] = useState<TripLoadItem[]>([])
   const [stops, setStops] = useState<TripStop[]>([])
 
   const load = useCallback(async () => {
-    const [a, b] = await Promise.all([
-      supabase.from('trip_load_items').select('*').eq('trip_id', trip.id).order('item_name'),
-      supabase.from('trip_stops').select('*').eq('trip_id', trip.id).order('sort_order'),
-    ])
-    setItems((a.data ?? []) as TripLoadItem[])
-    setStops((b.data ?? []) as TripStop[])
+    const r = await api.get(`/api/trips/${trip.id}`)
+    setItems(r.load); setStops(r.stops)
   }, [trip.id])
   useEffect(() => { load() }, [load])
 
   async function toggle(it: TripLoadItem) {
     setItems(prev => prev.map(x => x.id === it.id ? { ...x, loaded: !x.loaded } : x))
-    await supabase.from('trip_load_items').update({ loaded: !it.loaded }).eq('id', it.id)
-  }
-
-  async function start() {
-    await supabase.from('trips').update({ status: 'entregando' }).eq('id', trip.id)
-    onReady()
-  }
-
-  async function cancel() {
-    if (!confirm('¿Cancelar este viaje? Los faltantes se quedan como están.')) return
-    await supabase.from('trips').delete().eq('id', trip.id)
-    onCancel()
+    await api.post(`/api/trips/${trip.id}`, { action: 'toggleLoad', itemId: it.id, value: !it.loaded })
   }
 
   const pending = items.filter(i => !i.loaded).length
@@ -177,122 +125,88 @@ function LoadCart({ trip, onReady, onCancel }: { trip: Trip; onReady: () => void
               {it.boxes > 0 && `${it.boxes} caja${it.boxes > 1 ? 's' : ''}`}
               {it.boxes > 0 && it.remainder_pcs > 0 && ' + '}
               {it.remainder_pcs > 0 && `${it.remainder_pcs} pzs`}
-              {it.boxes === 0 && it.remainder_pcs === 0 && '—'}
             </div>
           </Check>
         ))}
       </Section>
 
       <Section title="Paradas de este viaje">
-        {stops.map((s, i) => (
-          <div key={s.id} style={{ ...row, borderBottom: i === stops.length - 1 ? 'none' : `1px solid ${C.line}` }}>
-            <span>{i + 1}. {spaceLabel(s)}</span>
-          </div>
-        ))}
+        {stops.map((s, i) => <div key={s.id} style={{ ...row, borderBottom: i === stops.length - 1 ? 'none' : undefined }}>
+          <span>{i + 1}. {spaceLabel(s)}</span>
+        </div>)}
       </Section>
 
-      <button onClick={start} style={btn(pending > 0 ? C.amber : C.green)}>
+      <button onClick={async () => { await api.post(`/api/trips/${trip.id}`, { action: 'startRoute' }); reload() }}
+        style={btn(pending > 0 ? C.amber : C.green)}>
         {pending > 0 ? `Salir con ${pending} sin palomear` : 'Carrito listo · empezar ruta'}
       </button>
-      <button onClick={cancel} style={{ ...btnGhost, width: '100%', marginTop: 8, color: C.red }}>Cancelar viaje</button>
+      <button onClick={async () => {
+        if (!confirm('¿Cancelar este viaje?')) return
+        await api.post(`/api/trips/${trip.id}`, { action: 'cancel' }); reload()
+      }} style={{ ...btnGhost, width: '100%', marginTop: 8, color: C.red }}>Cancelar viaje</button>
     </>
   )
 }
 
-// ---------- PASO 3: ruta de entrega ----------
-function Route({ trip, onDone }: { trip: Trip; onDone: () => void }) {
+function Route({ trip, reload }: { trip: Trip; reload: () => void }) {
   const [stops, setStops] = useState<TripStop[]>([])
   const [items, setItems] = useState<TripStopItem[]>([])
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
-    const [a, b] = await Promise.all([
-      supabase.from('trip_stops').select('*').eq('trip_id', trip.id).order('sort_order'),
-      supabase.from('trip_stop_items').select('*').eq('trip_id', trip.id),
-    ])
-    setStops((a.data ?? []) as TripStop[])
-    setItems((b.data ?? []) as TripStopItem[])
+    const r = await api.get(`/api/trips/${trip.id}`)
+    setStops(r.stops); setItems(r.items)
   }, [trip.id])
   useEffect(() => { load() }, [load])
 
   const current = stops.find(s => !s.delivered_at)
   const currentItems = current ? items.filter(i => i.stop_id === current.id) : []
+  const doneCount = stops.filter(s => s.delivered_at).length
 
-  async function toggleItem(it: TripStopItem) {
+  async function toggle(it: TripStopItem) {
     setItems(prev => prev.map(x => x.id === it.id ? { ...x, delivered: !x.delivered } : x))
-    await supabase.from('trip_stop_items').update({ delivered: !it.delivered }).eq('id', it.id)
+    await api.post(`/api/trips/${trip.id}`, { action: 'toggleDeliver', itemId: it.id, value: !it.delivered })
   }
 
-  async function finishStop() {
+  async function finish() {
     if (!current || busy) return
     setBusy(true)
-    const entregados = currentItems.filter(i => i.delivered)
-
-    // Lo entregado deja el espacio en su estándar
-    if (entregados.length > 0) {
-      await Promise.all(entregados.map(i =>
-        supabase.from('space_status')
-          .update({
-            steps_present: i.steps_standard,
-            missing_pcs: 0,
-            updated_by: trip.runner_name,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('space_key', current.space_key).eq('item_id', i.item_id)
-      ))
-    }
-    await supabase.from('trip_stops').update({ delivered_at: new Date().toISOString() }).eq('id', current.id)
-
-    const remaining = stops.filter(s => s.id !== current.id && !s.delivered_at).length
-    if (remaining === 0) {
-      await supabase.from('trips').update({ status: 'completo', closed_at: new Date().toISOString() }).eq('id', trip.id)
-      setBusy(false); onDone(); return
-    }
-    await load()
+    const r = await api.post(`/api/trips/${trip.id}`, { action: 'finishStop', stopId: current.id })
+    if (r.tripClosed) reload(); else await load()
     setBusy(false)
   }
-
-  async function abandon() {
-    if (!confirm('¿Terminar el viaje aquí? Las paradas no entregadas se quedan pendientes.')) return
-    await supabase.from('trips').update({ status: 'completo', closed_at: new Date().toISOString() }).eq('id', trip.id)
-    onDone()
-  }
-
-  const doneCount = stops.filter(s => s.delivered_at).length
 
   return (
     <>
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={sectionLabel}>Paso 3 · Ruta de entrega</div>
         <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-          {stops.map(s => (
-            <div key={s.id} style={{
-              flex: 1, height: 6, borderRadius: 3,
-              background: s.delivered_at ? C.green : (s.id === current?.id ? C.amber : C.line),
-            }} />
-          ))}
+          {stops.map(s => <div key={s.id} style={{
+            flex: 1, height: 6, borderRadius: 3,
+            background: s.delivered_at ? C.green : (s.id === current?.id ? C.amber : C.line),
+          }} />)}
         </div>
         <div style={{ fontSize: 13, color: C.gray }}>{doneCount} de {stops.length} paradas entregadas</div>
       </div>
 
-      {current ? (
+      {current && (
         <Section title={`Parada ${doneCount + 1} · ${spaceLabel(current)}`}>
-          {currentItems.length === 0 && <p style={{ color: C.gray, margin: 0 }}>Nada que bajar aquí.</p>}
           {currentItems.map(it => (
-            <Check key={it.id} on={it.delivered} onClick={() => toggleItem(it)}>
+            <Check key={it.id} on={it.delivered} onClick={() => toggle(it)}>
               <strong>{it.item_name}</strong>
               <div style={{ fontSize: 12, color: C.gray }}>{fmt(Number(it.units))} unidades · {it.pcs} pzs</div>
             </Check>
           ))}
-          <button onClick={finishStop} disabled={busy} style={{ ...btn(busy ? C.gray : C.green), marginTop: 12 }}>
+          <button onClick={finish} disabled={busy} style={{ ...btn(busy ? C.gray : C.green), marginTop: 12 }}>
             {busy ? 'Guardando…' : 'Parada lista · siguiente'}
           </button>
         </Section>
-      ) : (
-        <p style={{ color: C.green }}>Viaje completo.</p>
       )}
 
-      <button onClick={abandon} style={{ ...btnGhost, width: '100%', marginTop: 8, color: C.red }}>Terminar viaje aquí</button>
+      <button onClick={async () => {
+        if (!confirm('¿Terminar el viaje aquí? Las paradas no entregadas se quedan pendientes.')) return
+        await api.post(`/api/trips/${trip.id}`, { action: 'close' }); reload()
+      }} style={{ ...btnGhost, width: '100%', marginTop: 8, color: C.red }}>Terminar viaje aquí</button>
     </>
   )
 }

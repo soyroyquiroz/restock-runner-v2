@@ -1,35 +1,32 @@
 import { useState, useEffect, useCallback } from 'react'
 import { ITEM_BY_ID, pcsToBoxes, fmt } from '@/lib/data'
-import { supabase, ReportRow, SpaceStatusRow, spaceLabel, routeSort } from '@/lib/supabase'
+import { ReportRow, SpaceStatusRow, Runner, spaceLabel, routeSort } from '@/lib/types'
+import { api } from '@/lib/api'
 import { C, card, row, btnGhost, sectionLabel, Tab } from '@/lib/ui'
 
-export default function Progress() {
+export default function Progress({ runner }: { runner: Runner }) {
   const [sub, setSub] = useState<'hoy' | 'inventario'>('hoy')
   const [reports, setReports] = useState<ReportRow[]>([])
   const [status, setStatus] = useState<SpaceStatusRow[]>([])
+  const [scope, setScope] = useState<string>('')
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const since = new Date(); since.setHours(0, 0, 0, 0)
-    const [a, b] = await Promise.all([
-      supabase.from('reports').select('*').gte('created_at', since.toISOString()).order('created_at', { ascending: false }),
-      supabase.from('space_status').select('*').order('updated_at', { ascending: false }),
-    ])
-    setReports((a.data ?? []) as ReportRow[])
-    setStatus((b.data ?? []) as SpaceStatusRow[])
+    try {
+      const r = await api.get('/api/progress')
+      setReports(r.reports); setStatus(r.status); setScope(r.scope)
+    } catch {}
     setLoading(false)
   }, [])
-
   useEffect(() => { load() }, [load])
 
-  // Total consolidado del boathouse a partir de lo que falta ahora mismo
   const totals: Record<number, number> = {}
   status.forEach(s => { if (s.missing_pcs > 0) totals[s.item_id] = (totals[s.item_id] || 0) + s.missing_pcs })
 
-  const bySpace = status.reduce((acc: Record<string, SpaceStatusRow[]>, s) => {
-    (acc[s.space_key] ||= []).push(s); return acc
-  }, {})
+  const bySpace = Object.values(
+    status.reduce((acc: Record<string, SpaceStatusRow[]>, s) => { (acc[s.space_key] ||= []).push(s); return acc }, {})
+  ).sort((a, b) => routeSort(a[0], b[0]))
 
   return (
     <>
@@ -43,8 +40,11 @@ export default function Progress() {
 
       {!loading && sub === 'hoy' && (
         <>
-          <div style={sectionLabel}>{reports.length} espacio{reports.length === 1 ? '' : 's'} surtido{reports.length === 1 ? '' : 's'} hoy</div>
-          {reports.length === 0 && <p style={{ color: C.gray }}>Nadie ha capturado nada hoy.</p>}
+          <div style={sectionLabel}>
+            {reports.length} espacio{reports.length === 1 ? '' : 's'} hoy
+            {scope === 'propio' && ' · solo tu actividad'}
+          </div>
+          {reports.length === 0 && <p style={{ color: C.gray }}>Nada capturado hoy.</p>}
           {reports.map(r => (
             <div key={r.id} style={{ ...card, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
@@ -61,10 +61,8 @@ export default function Progress() {
 
       {!loading && sub === 'inventario' && (
         <>
-          <div style={sectionLabel}>Sacar del boathouse (faltante actual de toda la isla)</div>
-          {Object.keys(totals).length === 0 ? (
-            <p style={{ color: C.gray }}>Sin faltantes registrados.</p>
-          ) : (
+          <div style={sectionLabel}>Faltante actual de toda la isla</div>
+          {Object.keys(totals).length === 0 ? <p style={{ color: C.gray }}>Sin faltantes.</p> : (
             <div style={{ ...card, marginBottom: 18 }}>
               {Object.entries(totals).map(([id, pcs]) => {
                 const item = ITEM_BY_ID[Number(id)]
@@ -84,25 +82,22 @@ export default function Progress() {
           )}
 
           <div style={sectionLabel}>Nivel por espacio</div>
-          {Object.entries(bySpace).map(([k, rows]) => {
-            const faltan = rows.filter(r => r.missing_pcs > 0)
+          {bySpace.map(rows => {
             const head = rows[0]
+            const faltan = rows.filter(r => r.missing_pcs > 0)
             return (
-              <div key={k} style={{ ...card, marginBottom: 8 }}>
+              <div key={head.space_key} style={{ ...card, marginBottom: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                   <strong>{spaceLabel(head)}</strong>
-                  <span style={{ fontSize: 11, color: C.gray }}>
-                    {head.updated_by} · {new Date(head.updated_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
-                  </span>
+                  <span style={{ fontSize: 11, color: C.gray }}>{head.updated_by}</span>
                 </div>
-                {faltan.length === 0 ? (
-                  <p style={{ color: C.green, margin: 0, fontSize: 13 }}>Completo</p>
-                ) : faltan.map(r => (
-                  <div key={r.item_id} style={{ ...row, borderBottom: 'none', padding: '3px 0' }}>
-                    <span style={{ fontSize: 13 }}>{r.item_name}</span>
-                    <span style={{ fontSize: 13, color: C.red }}>{fmt(Number(r.steps_present))} / {fmt(Number(r.steps_standard))}</span>
-                  </div>
-                ))}
+                {faltan.length === 0 ? <p style={{ color: C.green, margin: 0, fontSize: 13 }}>Completo</p> :
+                  faltan.map(r => (
+                    <div key={r.item_id} style={{ ...row, borderBottom: 'none', padding: '3px 0' }}>
+                      <span style={{ fontSize: 13 }}>{r.item_name}</span>
+                      <span style={{ fontSize: 13, color: C.red }}>{fmt(Number(r.steps_present))} / {fmt(Number(r.steps_standard))}</span>
+                    </div>
+                  ))}
               </div>
             )
           })}
@@ -111,4 +106,3 @@ export default function Progress() {
     </>
   )
 }
-

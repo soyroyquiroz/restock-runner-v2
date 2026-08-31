@@ -1,30 +1,34 @@
 import { useState, useEffect } from 'react'
-import { supabase, Runner } from '@/lib/supabase'
-import { C, wrap, card, btnGhost, linkBtn, sectionLabel, input, Tab } from '@/lib/ui'
+import { Runner } from '@/lib/types'
+import { api } from '@/lib/api'
+import { C, wrap, card, btn, btnGhost, linkBtn, sectionLabel, input, Tab, Section } from '@/lib/ui'
 import Capture from '@/components/Capture'
 import TripSection from '@/components/Trip'
 import Progress from '@/components/Progress'
 import Admin from '@/components/Admin'
 
-type View = 'ronda' | 'viaje' | 'progreso' | 'runners'
+type View = 'ronda' | 'viaje' | 'progreso' | 'equipo' | 'cuenta'
 
 export default function Home() {
   const [runner, setRunner] = useState<Runner | null>(null)
+  const [checking, setChecking] = useState(true)
   const [view, setView] = useState<View>('ronda')
 
   useEffect(() => {
-    const raw = localStorage.getItem('rr-session')
-    if (raw) { try { setRunner(JSON.parse(raw)) } catch {} }
+    api.get('/api/auth/me').then(r => setRunner(r.runner)).catch(() => {}).finally(() => setChecking(false))
   }, [])
 
-  if (!runner) return <Login onLogin={r => { setRunner(r); localStorage.setItem('rr-session', JSON.stringify(r)) }} />
+  if (checking) return <div style={wrap}><p style={{ color: C.gray }}>Cargando…</p></div>
+  if (!runner) return <Login onLogin={setRunner} />
+
+  const canSeeTeam = runner.role !== 'runner'
 
   return (
     <div style={wrap}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, borderBottom: `1px solid ${C.line}`, marginBottom: 14 }}>
         <strong style={{ fontSize: 18 }}>Restock Runner</strong>
         <span style={{ fontSize: 13, color: C.gray }}>
-          {runner.name} · <button onClick={() => { localStorage.removeItem('rr-session'); setRunner(null) }} style={linkBtn}>salir</button>
+          {runner.name} · <button onClick={async () => { await api.post('/api/auth/logout'); setRunner(null) }} style={linkBtn}>salir</button>
         </span>
       </div>
 
@@ -32,40 +36,67 @@ export default function Home() {
         <Tab label="1 Ronda" active={view === 'ronda'} onClick={() => setView('ronda')} />
         <Tab label="2 Viaje" active={view === 'viaje'} onClick={() => setView('viaje')} />
         <Tab label="Progreso" active={view === 'progreso'} onClick={() => setView('progreso')} />
-        {runner.role === 'admin' && <Tab label="Runners" active={view === 'runners'} onClick={() => setView('runners')} />}
+        {canSeeTeam && <Tab label="Equipo" active={view === 'equipo'} onClick={() => setView('equipo')} />}
+        <Tab label="Cuenta" active={view === 'cuenta'} onClick={() => setView('cuenta')} />
       </div>
 
       {view === 'ronda' && <Capture runner={runner} />}
       {view === 'viaje' && <TripSection runner={runner} />}
-      {view === 'progreso' && <Progress />}
-      {view === 'runners' && <Admin />}
+      {view === 'progreso' && <Progress runner={runner} />}
+      {view === 'equipo' && canSeeTeam && <Admin runner={runner} />}
+      {view === 'cuenta' && <Account runner={runner} />}
     </div>
   )
 }
 
+function Account({ runner }: { runner: Runner }) {
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [msg, setMsg] = useState('')
+
+  async function change() {
+    setMsg('')
+    try {
+      await api.post('/api/auth/pin', { current, next })
+      setCurrent(''); setNext(''); setMsg('PIN cambiado ✓')
+    } catch (e: any) { setMsg(e.message) }
+  }
+
+  return (
+    <Section title="Cambiar mi PIN">
+      <p style={{ fontSize: 13, color: C.gray, marginTop: -4 }}>
+        {runner.name} · rol {runner.role}
+      </p>
+      <input value={current} type="password" inputMode="numeric" maxLength={4} placeholder="PIN actual"
+        onChange={e => setCurrent(e.target.value.replace(/\D/g, '').slice(0, 4))} style={input} />
+      <input value={next} type="password" inputMode="numeric" maxLength={4} placeholder="PIN nuevo"
+        onChange={e => setNext(e.target.value.replace(/\D/g, '').slice(0, 4))} style={{ ...input, marginTop: 8 }} />
+      <button onClick={change} style={{ ...btn(C.green), marginTop: 12 }}>Cambiar PIN</button>
+      {msg && <p style={{ fontSize: 13, color: msg.endsWith('✓') ? C.green : C.red, marginBottom: 0 }}>{msg}</p>}
+    </Section>
+  )
+}
+
 function Login({ onLogin }: { onLogin: (r: Runner) => void }) {
-  const [runners, setRunners] = useState<Runner[]>([])
-  const [picked, setPicked] = useState<Runner | null>(null)
+  const [runners, setRunners] = useState<{ id: string; name: string }[]>([])
+  const [picked, setPicked] = useState<{ id: string; name: string } | null>(null)
   const [pin, setPin] = useState('')
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.from('runners').select('id,name,role,active').eq('active', true).order('name')
-      .then(({ data, error }) => {
-        if (error) setErr('No se pudo conectar a la base de datos.')
-        else setRunners((data ?? []) as Runner[])
-        setLoading(false)
-      })
+    api.get('/api/auth/runners')
+      .then(r => setRunners(r.runners))
+      .catch(() => setErr('No se pudo conectar.'))
+      .finally(() => setLoading(false))
   }, [])
 
   async function tryPin(value: string) {
     if (!picked || value.length !== 4) return
-    const { data, error } = await supabase.from('runners')
-      .select('id,name,role,active').eq('id', picked.id).eq('pin', value).maybeSingle()
-    if (error) { setErr('Error de conexión.'); return }
-    if (!data) { setErr('PIN incorrecto.'); setPin(''); return }
-    onLogin(data as Runner)
+    try {
+      const r = await api.post('/api/auth/login', { id: picked.id, pin: value })
+      onLogin(r.runner)
+    } catch (e: any) { setErr(e.message); setPin('') }
   }
 
   const nameBtn: React.CSSProperties = {
@@ -84,12 +115,9 @@ function Login({ onLogin }: { onLogin: (r: Runner) => void }) {
         {!loading && !picked && (
           <>
             <div style={sectionLabel}>¿Quién eres?</div>
-            {runners.length === 0 && <p style={{ color: C.gray, fontSize: 13 }}>No hay runners dados de alta todavía.</p>}
+            {runners.length === 0 && <p style={{ color: C.gray, fontSize: 13 }}>No hay runners dados de alta.</p>}
             {runners.map(r => (
-              <button key={r.id} onClick={() => { setPicked(r); setErr('') }} style={nameBtn}>
-                {r.name}
-                {r.role !== 'runner' && <span style={{ fontSize: 11, color: C.gray, marginLeft: 6 }}>{r.role}</span>}
-              </button>
+              <button key={r.id} onClick={() => { setPicked(r); setErr('') }} style={nameBtn}>{r.name}</button>
             ))}
           </>
         )}
@@ -97,16 +125,13 @@ function Login({ onLogin }: { onLogin: (r: Runner) => void }) {
         {!loading && picked && (
           <>
             <div style={sectionLabel}>PIN de {picked.name}</div>
-            <input
-              value={pin} inputMode="numeric" autoFocus type="password" maxLength={4}
+            <input value={pin} inputMode="numeric" autoFocus type="password" maxLength={4} placeholder="••••"
               onChange={e => {
                 const v = e.target.value.replace(/\D/g, '').slice(0, 4)
                 setPin(v); setErr('')
                 if (v.length === 4) tryPin(v)
               }}
-              placeholder="••••"
-              style={{ ...input, textAlign: 'center', fontSize: 30, letterSpacing: 12 }}
-            />
+              style={{ ...input, textAlign: 'center', fontSize: 30, letterSpacing: 12 }} />
             <button onClick={() => { setPicked(null); setPin(''); setErr('') }} style={{ ...btnGhost, marginTop: 10 }}>← Cambiar de nombre</button>
           </>
         )}
