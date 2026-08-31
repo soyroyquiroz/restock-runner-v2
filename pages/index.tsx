@@ -87,7 +87,7 @@ function Login({ onLogin }: { onLogin: (r: Runner) => void }) {
   useEffect(() => {
     api.get('/api/auth/runners')
       .then(r => setRunners(r.runners))
-      .catch(() => setErr('No se pudo conectar.'))
+      .catch((e: any) => setErr(e.message || 'No se pudo conectar.'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -115,7 +115,7 @@ function Login({ onLogin }: { onLogin: (r: Runner) => void }) {
         {!loading && !picked && (
           <>
             <div style={sectionLabel}>¿Quién eres?</div>
-            {runners.length === 0 && <p style={{ color: C.gray, fontSize: 13 }}>No hay runners dados de alta.</p>}
+            {runners.length === 0 && !err && <p style={{ color: C.gray, fontSize: 13 }}>No hay runners dados de alta.</p>}
             {runners.map(r => (
               <button key={r.id} onClick={() => { setPicked(r); setErr('') }} style={nameBtn}>{r.name}</button>
             ))}
