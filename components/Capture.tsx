@@ -143,7 +143,7 @@ export default function Capture({ runner }: { runner: Runner }) {
           <p style={{ fontSize: 12, color: C.gray, marginTop: -4 }}>
             Mueve el slider a las unidades que <strong>SÍ hay</strong>. Lo que falta se calcula solo.
           </p>
-          {groupByShelf(visibleItems).map(({ shelf, items: delShelf }) => (
+          {groupByShelf(visibleItems, entity).map(({ shelf, items: delShelf }) => (
             <div key={shelf.id}>
               <div style={{
                 fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6, color: C.gray,

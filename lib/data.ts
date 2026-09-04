@@ -114,6 +114,10 @@ export const ITEMS: Item[] = [
   { id: 24, es: 'Toothpaste', pcsBox: 24,  priority: 'low', in: ['main'], main: caja(1, 24) },
   { id: 25, es: 'Razors',     pcsBox: 144, priority: 'low', in: ['main'], main: caja(1, 144) },
   { id: 26, es: 'Slippers',   pcsBox: 100, priority: 'low', in: ['main'], main: caja(1, 100), hanksOnly: true },
+  { id: 27, es: 'Coffee Mugs',     pcsBox: 6, priority: 'low', in: ['main'], main: caja(1, 6) },
+  { id: 28, es: 'Small Mason Jar', pcsBox: 6, priority: 'low', in: ['main'], main: caja(1, 6) },
+  { id: 29, es: 'Bleach', pcsBox: 6, priority: 'low', in: ['main'], main: caja(1, 6),
+    TODO: 'piezas por caja y estándar sin confirmar — ajustar desde la pestaña Catálogo' },
 ]
 
 export const ITEM_BY_ID: Record<number, Item> = Object.fromEntries(ITEMS.map(i => [i.id, i]))
@@ -340,35 +344,51 @@ export function boxesForStops(item: Item, stops: StopNeed[]): { boxes: number; l
 // ============================================================
 export interface Shelf { id: string; nombre: string; items: number[] }
 
-export const SHELVES: Shelf[] = [
-  { id: 's1', nombre: 'Shelf de arriba',        items: [1, 9, 8, 2] },              // TP, cups, kleenex, paper towel
-  { id: 's2', nombre: 'Shelf de en medio',      items: [11, 3, 7, 4] },             // shower caps, soap, decaf, coffee
-  { id: 's3', nombre: 'Abajo de los bins',      items: [10, 20, 5, 21, 22, 23, 17, 18, 24, 25, 26] },
-  { id: 's4', nombre: 'Capilares y agua',       items: [14, 16, 15, 13, 6] },       // bw, cond, shmp, bl, agua
-  { id: 's5', nombre: 'Colgados en el hook',    items: [19, 12] },                  // condiment kit, laundry bags
+export const SHELVES_OUTSIDE: Shelf[] = [
+  { id: 'o1', nombre: 'Shelf de arriba',     items: [1, 9, 8, 2] },
+  { id: 'o2', nombre: 'Shelf de en medio',   items: [11, 3, 7, 4] },
+  { id: 'o3', nombre: 'Abajo de los bins',   items: [10, 20, 5, 21, 22, 23, 17, 18] },
+  { id: 'o4', nombre: 'Capilares y agua',    items: [14, 16, 15, 13, 6] },
+  { id: 'o5', nombre: 'Colgados en el hook', items: [19, 12] },
 ]
 
-const SHELF_POS: Record<number, number> = {}
-SHELVES.forEach((sh, si) => sh.items.forEach((id, ii) => { SHELF_POS[id] = si * 100 + ii }))
+export const SHELVES_MAIN: Shelf[] = [
+  { id: 'm1', nombre: 'Shelf de arriba',        items: [1, 9, 8] },
+  { id: 'm2', nombre: 'Cajas de pods',          items: [4, 7, 5] },
+  { id: 'm3', nombre: 'Mugs, jars y wipes',     items: [27, 28, 20] },
+  { id: 'm4', nombre: 'Productos capilares',    items: [14, 16, 15, 13] },
+  { id: 'm5', nombre: 'Abajo de los capilares', items: [12, 3, 11, 10] },
+  { id: 'm6', nombre: 'En el suelo',            items: [19, 29] },
+  { id: 'm7', nombre: 'Shelf de la derecha (como caiga)', items: [6, 21, 22, 23, 17, 18, 24, 25, 26, 2] },
+]
 
-export function shelfRank(itemId: number): number {
-  return SHELF_POS[itemId] ?? 9999
+export function shelvesFor(entity: Entity): Shelf[] {
+  return entity === 'main' ? SHELVES_MAIN : SHELVES_OUTSIDE
 }
 
-export function shelfOf(itemId: number): Shelf | null {
-  return SHELVES.find(sh => sh.items.includes(itemId)) ?? null
+function posMap(shelves: Shelf[]): Record<number, number> {
+  const m: Record<number, number> = {}
+  shelves.forEach((sh, si) => sh.items.forEach((id, ii) => { m[id] = si * 100 + ii }))
+  return m
+}
+const POS_OUTSIDE = posMap(SHELVES_OUTSIDE)
+const POS_MAIN = posMap(SHELVES_MAIN)
+
+export function shelfRank(itemId: number, entity: Entity = 'outside'): number {
+  const m = entity === 'main' ? POS_MAIN : POS_OUTSIDE
+  return m[itemId] ?? 9999
 }
 
 // Agrupa una lista de items por shelf, en orden de recorrido
-export function groupByShelf<T extends { id: number }>(items: T[]): { shelf: Shelf; items: T[] }[] {
+export function groupByShelf<T extends { id: number }>(items: T[], entity: Entity = 'outside'): { shelf: Shelf; items: T[] }[] {
   const out: { shelf: Shelf; items: T[] }[] = []
-  for (const shelf of SHELVES) {
+  for (const shelf of shelvesFor(entity)) {
     const enEsteShelf = shelf.items
       .map(id => items.find(i => i.id === id))
       .filter(Boolean) as T[]
     if (enEsteShelf.length) out.push({ shelf, items: enEsteShelf })
   }
-  const sueltos = items.filter(i => shelfRank(i.id) === 9999)
+  const sueltos = items.filter(i => shelfRank(i.id, entity) === 9999)
   if (sueltos.length) out.push({ shelf: { id: 'sx', nombre: 'Otros', items: [] }, items: sueltos })
   return out
 }

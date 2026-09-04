@@ -265,7 +265,7 @@ function Route({ trip, onDone }: { trip: Trip; onDone: () => void }) {
 
   const current = stops.find(s => !s.delivered_at)
   const currentItems = (current ? items.filter(i => i.stop_id === current.id) : [])
-    .slice().sort((a, b) => shelfRank(a.item_id) - shelfRank(b.item_id))
+    .slice().sort((a, b) => shelfRank(a.item_id, (current?.entity as any) ?? 'outside') - shelfRank(b.item_id, (current?.entity as any) ?? 'outside'))
 
   async function toggleItem(it: TripStopItem) {
     setItems(prev => prev.map(x => x.id === it.id ? { ...x, delivered: !x.delivered } : x))
