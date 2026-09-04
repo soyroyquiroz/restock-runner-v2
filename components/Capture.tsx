@@ -6,8 +6,10 @@ import {
 } from '@/lib/data'
 import { supabase, Runner, spaceKey } from '@/lib/supabase'
 import { C, card, btn, Section, Pick, input } from '@/lib/ui'
+import { useT } from '@/lib/i18n'
 
 export default function Capture({ runner }: { runner: Runner }) {
+  const { t, tUnit, lang } = useT()
   const [entity, setEntity] = useState<Entity | null>(null)
   const [lodge, setLodge] = useState<number | null>(null)
   const [piso, setPiso] = useState<string | null>(null)
@@ -58,11 +60,11 @@ export default function Capture({ runner }: { runner: Runner }) {
       restock_type: type,
     }).select('id').single()
 
-    if (e1 || !report) { setMsg('No se pudo guardar: ' + (e1?.message ?? 'error')); setSaving(false); return }
+    if (e1 || !report) { setMsg(t('saveFailed') + ' ' + (e1?.message ?? '')); setSaving(false); return }
 
     const { error: e2 } = await supabase.from('report_items')
       .insert(rows.map(r => ({ ...r, report_id: report.id })))
-    if (e2) { setMsg('Reporte guardado pero faltó el detalle: ' + e2.message); setSaving(false); return }
+    if (e2) { setMsg(t('saveFailed') + ' ' + e2.message); setSaving(false); return }
 
     const { error: e3 } = await supabase.from('space_status').upsert(
       rows.map(r => ({
@@ -77,8 +79,8 @@ export default function Capture({ runner }: { runner: Runner }) {
       })),
       { onConflict: 'space_key,item_id' }
     )
-    if (e3) setMsg('Guardado, pero el estado del espacio no se actualizó: ' + e3.message)
-    else setMsg('Guardado ✓')
+    if (e3) setMsg(t('saveFailed') + ' ' + e3.message)
+    else setMsg(t('saved') + ' ✓')
 
     setBridge(null); setPresent({})
     loadDone()
@@ -87,17 +89,17 @@ export default function Capture({ runner }: { runner: Runner }) {
 
   return (
     <>
-      <Section title="1 · Dónde">
+      <Section title={t('stepWhere')}>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Pick label="Outside (Lodges)" active={entity === 'outside'} onClick={() => { setEntity('outside'); setPiso(null); setBridge(null); setPresent({}) }} />
-          <Pick label="Main Hotel" active={entity === 'main'} onClick={() => { setEntity('main'); setLodge(null); setBridge(null); setPresent({}) }} />
+          <Pick label={t('outside')} active={entity === 'outside'} onClick={() => { setEntity('outside'); setPiso(null); setBridge(null); setPresent({}) }} />
+          <Pick label={t('mainHotel')} active={entity === 'main'} onClick={() => { setEntity('main'); setLodge(null); setBridge(null); setPresent({}) }} />
         </div>
       </Section>
 
       {entity === 'outside' && (
-        <Section title="2 · Lodge y Bridge">
+        <Section title={t('stepLodge')}>
           <select value={lodge ?? ''} onChange={e => { setLodge(e.target.value ? Number(e.target.value) : null); setBridge(null) }} style={input}>
-            <option value="">Selecciona lodge</option>
+            <option value="">{t('pickLodge')}</option>
             {LODGES.map(l => <option key={l.num} value={l.num}>{l.name}</option>)}
           </select>
           {lodge && (
@@ -121,34 +123,34 @@ export default function Capture({ runner }: { runner: Runner }) {
       )}
 
       {entity === 'main' && (
-        <Section title="2 · Piso">
+        <Section title={t('stepFloor')}>
           <select value={piso ?? ''} onChange={e => { setPiso(e.target.value || null); setPresent({}); setMsg('') }} style={input}>
-            <option value="">Selecciona piso</option>
+            <option value="">{t('pickFloor')}</option>
             {PISOS.map(p => <option key={p} value={p}>{p}{doneToday.has(spaceKey('main', null, null, p)) ? ' ✓' : ''}</option>)}
           </select>
         </Section>
       )}
 
       {locationReady && (
-        <Section title="3 · Tipo de restock">
+        <Section title={t('stepType')}>
           <div style={{ display: 'flex', gap: 8 }}>
-            <Pick label="Profundidad" sub="todos los items" active={type === 'profundidad'} onClick={() => setType('profundidad')} />
-            <Pick label="Urgente" sub="solo críticos" active={type === 'urgente'} onClick={() => setType('urgente')} />
+            <Pick label={t('deep')} sub={t('deepSub')} active={type === 'profundidad'} onClick={() => setType('profundidad')} />
+            <Pick label={t('urgent')} sub={t('urgentSub')} active={type === 'urgente'} onClick={() => setType('urgente')} />
           </div>
         </Section>
       )}
 
       {locationReady && type && entity && (
-        <Section title={`4 · Qué hay (${visibleItems.length} items)`}>
+        <Section title={`${t('stepItems')} (${visibleItems.length})`}>
           <p style={{ fontSize: 12, color: C.gray, marginTop: -4 }}>
-            Mueve el slider a las unidades que <strong>SÍ hay</strong>. Lo que falta se calcula solo.
+            {t('sliderHelp')}
           </p>
           {groupByShelf(visibleItems, entity).map(({ shelf, items: delShelf }) => (
             <div key={shelf.id}>
               <div style={{
                 fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6, color: C.gray,
                 marginTop: 14, paddingTop: 10, borderTop: `2px solid ${C.line}`,
-              }}>{shelf.nombre}</div>
+              }}>{lang === 'es' ? shelf.nombre : shelf.en}</div>
           {delShelf.map(item => {
             const std = getStandard(item, entity, piso)!
             const steps = present[item.id] ?? std.steps
@@ -161,17 +163,17 @@ export default function Capture({ runner }: { runner: Runner }) {
               <div key={item.id} style={{ padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
                   <strong>{item.es}</strong>
-                  <span style={{ color }}>{fmt(steps)} / {fmt(std.steps)} {std.steps === 1 ? std.unit : std.unitPlural}</span>
+                  <span style={{ color }}>{fmt(steps)} / {fmt(std.steps)} {tUnit(std.steps === 1 ? std.unit : std.unitPlural)}</span>
                 </div>
                 <input type="range" min={0} max={std.steps} step={allowsHalf(std) ? 0.5 : 1} value={steps}
                   onChange={e => setPresent(p => ({ ...p, [item.id]: Number(e.target.value) }))}
                   style={{ width: '100%', accentColor: color, marginTop: 6 }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.gray }}>
-                  <span>{pct}% lleno</span>
+                  <span>{pct}% {t('full')}</span>
                   <span style={{ color: missing > 0 ? C.red : C.green }}>
                     {missing > 0
-                      ? `falta ${fmt(missing)} ${missing > 1 ? std.unitPlural : std.unit} → ${boxes > 0 ? `${boxes} caja${boxes > 1 ? 's' : ''}` : ''}${boxes > 0 && remainderPcs > 0 ? ' + ' : ''}${remainderPcs > 0 ? `${remainderPcs} pcs` : ''}`
-                      : 'completo'}
+                      ? `${t('missing')} ${fmt(missing)} ${tUnit(missing > 1 ? std.unitPlural : std.unit)} → ${boxes > 0 ? `${boxes} ${boxes > 1 ? t('boxes') : t('box')}` : ''}${boxes > 0 && remainderPcs > 0 ? ' + ' : ''}${remainderPcs > 0 ? `${remainderPcs} ${t('pcs')}` : ''}`
+                      : t('complete')}
                   </span>
                 </div>
               </div>
@@ -181,7 +183,7 @@ export default function Capture({ runner }: { runner: Runner }) {
             </div>
           ))}
           <button onClick={save} disabled={saving} style={{ ...btn(saving ? C.gray : C.green), marginTop: 16 }}>
-            {saving ? 'Guardando…' : 'Guardar espacio'}
+            {saving ? t('saving') : t('saveSpace')}
           </button>
           {msg && <p style={{ fontSize: 13, color: msg.startsWith('Guardado ✓') ? C.green : C.red, marginBottom: 0 }}>{msg}</p>}
         </Section>

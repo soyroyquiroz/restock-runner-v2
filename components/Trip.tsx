@@ -5,8 +5,10 @@ import {
   spaceLabel, routeSort,
 } from '@/lib/supabase'
 import { C, card, row, btn, btnGhost, sectionLabel, Section, Check } from '@/lib/ui'
+import { useT } from '@/lib/i18n'
 
 export default function TripSection({ runner }: { runner: Runner }) {
+  const { t, tUnit } = useT()
   const [trip, setTrip] = useState<Trip | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -21,7 +23,7 @@ export default function TripSection({ runner }: { runner: Runner }) {
 
   useEffect(() => { loadTrip() }, [loadTrip])
 
-  if (loading) return <p style={{ color: C.gray }}>Cargando…</p>
+  if (loading) return <p style={{ color: C.gray }}>{t('loading')}</p>
   if (!trip) return <BuildTrip runner={runner} onCreated={loadTrip} />
   if (trip.status === 'cargando') return <LoadCart trip={trip} onReady={loadTrip} onCancel={loadTrip} />
   return <Route trip={trip} onDone={loadTrip} />
@@ -29,6 +31,7 @@ export default function TripSection({ runner }: { runner: Runner }) {
 
 // ---------- PASO 1: elegir bridges del viaje ----------
 function BuildTrip({ runner, onCreated }: { runner: Runner; onCreated: () => void }) {
+  const { t, tUnit } = useT()
   const [rows, setRows] = useState<SpaceStatusRow[]>([])
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
@@ -56,7 +59,7 @@ function BuildTrip({ runner, onCreated }: { runner: Runner; onCreated: () => voi
     const { data: trip, error: e1 } = await supabase.from('trips')
       .insert({ runner_id: runner.id, runner_name: runner.name, status: 'cargando' })
       .select('id').single()
-    if (e1 || !trip) { setMsg('No se pudo crear el viaje: ' + (e1?.message ?? '')); setBusy(false); return }
+    if (e1 || !trip) { setMsg(t('saveFailed') + ' ' + (e1?.message ?? '')); setBusy(false); return }
 
     // Paradas en orden de ruta
     const stopsPayload = chosen.map((g, i) => ({
@@ -65,7 +68,7 @@ function BuildTrip({ runner, onCreated }: { runner: Runner; onCreated: () => voi
       sort_order: i,
     }))
     const { data: stops, error: e2 } = await supabase.from('trip_stops').insert(stopsPayload).select('id,space_key')
-    if (e2 || !stops) { setMsg('Error al crear paradas: ' + (e2?.message ?? '')); setBusy(false); return }
+    if (e2 || !stops) { setMsg(t('saveFailed') + ' ' + (e2?.message ?? '')); setBusy(false); return }
 
     const stopId: Record<string, string> = Object.fromEntries(stops.map((s: any) => [s.space_key, s.id]))
 
@@ -117,7 +120,7 @@ function BuildTrip({ runner, onCreated }: { runner: Runner; onCreated: () => voi
       })
     })
     const { error: e3 } = await supabase.from('trip_stop_items').insert(stopItems)
-    if (e3) { setMsg('Error al armar las paradas: ' + e3.message); setBusy(false); return }
+    if (e3) { setMsg(t('saveFailed') + ' ' + e3.message); setBusy(false); return }
 
     // Lista de picking consolidada del boathouse
     // Del boathouse sacas exactamente las cajas que vas a parkear,
@@ -140,14 +143,14 @@ function BuildTrip({ runner, onCreated }: { runner: Runner; onCreated: () => voi
       })
 
     const { error: e4 } = await supabase.from('trip_load_items').insert(loadItems)
-    if (e4) { setMsg('Error al armar la lista de carga: ' + e4.message); setBusy(false); return }
+    if (e4) { setMsg(t('saveFailed') + ' ' + e4.message); setBusy(false); return }
 
     onCreated()
   }
 
   return (
     <>
-      <Section title="Paso 1 · Elige los bridges de este viaje">
+      <Section title={t('step1Pick')}>
         {spaces.length === 0 && (
           <p style={{ color: C.gray, margin: 0 }}>
             No hay faltantes registrados. Haz primero la ronda de inventario.
@@ -160,7 +163,7 @@ function BuildTrip({ runner, onCreated }: { runner: Runner; onCreated: () => voi
             <Check key={head.space_key} on={picked.has(head.space_key)} onClick={() => toggle(head.space_key)}>
               <strong>{spaceLabel(head)}</strong>
               <div style={{ fontSize: 12, color: C.gray }}>
-                {g.length} item{g.length === 1 ? '' : 's'} · {totalPcs} pzs
+                {g.length} {t('items')} · {totalPcs} {t('pcs')}
               </div>
             </Check>
           )
@@ -170,7 +173,7 @@ function BuildTrip({ runner, onCreated }: { runner: Runner; onCreated: () => voi
       {picked.size > 0 && (
         <>
           <button onClick={create} disabled={busy} style={btn(busy ? C.gray : C.green)}>
-            {busy ? 'Armando…' : `Armar viaje con ${picked.size} parada${picked.size === 1 ? '' : 's'}`}
+            {busy ? t('building') : `${t('buildTrip')} ${picked.size} ${picked.size === 1 ? t('stop') : t('stops')}`}
           </button>
           {msg && <p style={{ color: C.red, fontSize: 13 }}>{msg}</p>}
         </>
@@ -181,6 +184,7 @@ function BuildTrip({ runner, onCreated }: { runner: Runner; onCreated: () => voi
 
 // ---------- PASO 2: cargar el carrito ----------
 function LoadCart({ trip, onReady, onCancel }: { trip: Trip; onReady: () => void; onCancel: () => void }) {
+  const { t, tUnit } = useT()
   const [items, setItems] = useState<TripLoadItem[]>([])
   const [stops, setStops] = useState<TripStop[]>([])
 
@@ -214,24 +218,24 @@ function LoadCart({ trip, onReady, onCancel }: { trip: Trip; onReady: () => void
 
   return (
     <>
-      <Section title="Paso 2 · Carga el carrito">
+      <Section title={t('step2Load')}>
         <p style={{ fontSize: 13, color: C.gray, marginTop: -4 }}>
-          Todo lo que necesitas del boathouse para {stops.length} parada{stops.length === 1 ? '' : 's'}, en un solo viaje.
+          {t('loadHelp')} {stops.length} {stops.length === 1 ? t('stop') : t('stops')}, {t('inOneTrip')}
         </p>
         {items.map(it => (
           <Check key={it.id} on={it.loaded} onClick={() => toggle(it)}>
             <strong>{it.item_name}</strong>
             <div style={{ fontSize: 13, color: C.gray }}>
-              {it.boxes > 0 && `${it.boxes} caja${it.boxes > 1 ? 's' : ''}`}
+              {it.boxes > 0 && `${it.boxes} ${it.boxes > 1 ? t('boxes') : t('box')}`}
               {it.boxes > 0 && it.remainder_pcs > 0 && ' + '}
-              {it.remainder_pcs > 0 && `${it.remainder_pcs} pzs`}
+              {it.remainder_pcs > 0 && `${it.remainder_pcs} ${t('pcs')}`}
               {it.boxes === 0 && it.remainder_pcs === 0 && '—'}
             </div>
           </Check>
         ))}
       </Section>
 
-      <Section title="Paradas de este viaje">
+      <Section title={t('tripStops')}>
         {stops.map((s, i) => (
           <div key={s.id} style={{ ...row, borderBottom: i === stops.length - 1 ? 'none' : `1px solid ${C.line}` }}>
             <span>{i + 1}. {spaceLabel(s)}</span>
@@ -240,15 +244,16 @@ function LoadCart({ trip, onReady, onCancel }: { trip: Trip; onReady: () => void
       </Section>
 
       <button onClick={start} style={btn(pending > 0 ? C.amber : C.green)}>
-        {pending > 0 ? `Salir con ${pending} sin palomear` : 'Carrito listo · empezar ruta'}
+        {pending > 0 ? `${t('leaveWith')} ${pending} ${t('unchecked')}` : t('cartReady')}
       </button>
-      <button onClick={cancel} style={{ ...btnGhost, width: '100%', marginTop: 8, color: C.red }}>Cancelar viaje</button>
+      <button onClick={cancel} style={{ ...btnGhost, width: '100%', marginTop: 8, color: C.red }}>{t('cancelTrip')}</button>
     </>
   )
 }
 
 // ---------- PASO 3: ruta de entrega ----------
 function Route({ trip, onDone }: { trip: Trip; onDone: () => void }) {
+  const { t, tUnit } = useT()
   const [stops, setStops] = useState<TripStop[]>([])
   const [items, setItems] = useState<TripStopItem[]>([])
   const [busy, setBusy] = useState(false)
@@ -302,7 +307,7 @@ function Route({ trip, onDone }: { trip: Trip; onDone: () => void }) {
   }
 
   async function abandon() {
-    if (!confirm('¿Terminar el viaje aquí? Las paradas no entregadas se quedan pendientes.')) return
+    if (!confirm(t('confirmEnd'))) return
     await supabase.from('trips').update({ status: 'completo', closed_at: new Date().toISOString() }).eq('id', trip.id)
     onDone()
   }
@@ -312,7 +317,7 @@ function Route({ trip, onDone }: { trip: Trip; onDone: () => void }) {
   return (
     <>
       <div style={{ ...card, marginBottom: 12 }}>
-        <div style={sectionLabel}>Paso 3 · Ruta de entrega</div>
+        <div style={sectionLabel}>{t('step3Route')}</div>
         <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
           {stops.map(s => (
             <div key={s.id} style={{
@@ -321,11 +326,11 @@ function Route({ trip, onDone }: { trip: Trip; onDone: () => void }) {
             }} />
           ))}
         </div>
-        <div style={{ fontSize: 13, color: C.gray }}>{doneCount} de {stops.length} paradas entregadas</div>
+        <div style={{ fontSize: 13, color: C.gray }}>{doneCount} {t('of')} {stops.length} {t('stopsDone')}</div>
       </div>
 
       {current ? (
-        <Section title={`Parada ${doneCount + 1} · ${spaceLabel(current)}`}>
+        <Section title={`${t('stop')} ${doneCount + 1} · ${spaceLabel(current)}`}>
           {currentItems.length === 0 && <p style={{ color: C.gray, margin: 0 }}>Nada que bajar aquí.</p>}
           {currentItems.map(it => {
             const park = Number(it.park_boxes ?? 0)
@@ -334,25 +339,25 @@ function Route({ trip, onDone }: { trip: Trip; onDone: () => void }) {
               <Check key={it.id} on={it.delivered} onClick={() => toggleItem(it)}>
                 <strong>
                   {park > 0
-                    ? `Parkea ${park} caja${park > 1 ? 's' : ''} · ${it.item_name}`
-                    : `${it.pcs} pzs de lo que traes · ${it.item_name}`}
+                    ? `${t('park')} ${park} ${park > 1 ? t('boxes') : t('box')} · ${it.item_name}`
+                    : `${it.pcs} ${t('pcs')} ${t('fromCart')} · ${it.item_name}`}
                 </strong>
                 <div style={{ fontSize: 12, color: C.gray }}>
-                  deja {it.pcs} pzs ({fmt(Number(it.units))} unidades)
-                  {carry > 0 && ` · te sobran ${carry} para el siguiente`}
+                  {t('leave')} {it.pcs} {t('pcs')} ({fmt(Number(it.units))} {t('units')})
+                  {carry > 0 && ` · ${carry} ${t('leftFor')}`}
                 </div>
               </Check>
             )
           })}
           <button onClick={finishStop} disabled={busy} style={{ ...btn(busy ? C.gray : C.green), marginTop: 12 }}>
-            {busy ? 'Guardando…' : 'Parada lista · siguiente'}
+            {busy ? t('saving') : t('stopDone')}
           </button>
         </Section>
       ) : (
         <p style={{ color: C.green }}>Viaje completo.</p>
       )}
 
-      <button onClick={abandon} style={{ ...btnGhost, width: '100%', marginTop: 8, color: C.red }}>Terminar viaje aquí</button>
+      <button onClick={abandon} style={{ ...btnGhost, width: '100%', marginTop: 8, color: C.red }}>{t('endTrip')}</button>
     </>
   )
 }

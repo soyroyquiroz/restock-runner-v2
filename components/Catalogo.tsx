@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { ITEMS, getStandard, pcsBoxOf, loadOverrides, Item, Entity } from '@/lib/data'
 import { supabase, Runner } from '@/lib/supabase'
 import { C, card, btn, btnGhost, input, sectionLabel, Section } from '@/lib/ui'
+import { useT } from '@/lib/i18n'
 
 // Editor del catálogo. Solo admin. Cambia proporciones sin tocar código.
 export default function Catalogo({ runner }: { runner: Runner }) {
+  const { t, tUnit } = useT()
   const [abierto, setAbierto] = useState<number | null>(null)
   const [msg, setMsg] = useState('')
   const [tick, setTick] = useState(0)
@@ -22,30 +24,28 @@ export default function Catalogo({ runner }: { runner: Runner }) {
       item_id: itemId, scope, ...campos,
       updated_by: runner.name, updated_at: new Date().toISOString(),
     }, { onConflict: 'item_id,scope' })
-    if (error) return setMsg('No se pudo guardar: ' + error.message)
+    if (error) return setMsg(error.message)
     await recargar()
-    setMsg('Guardado ✓')
+    setMsg(t('saved') + ' ✓')
   }
 
   async function restaurar(itemId: number) {
-    if (!confirm('¿Regresar este item a los valores originales del código?')) return
+    if (!confirm(t('confirmRestore'))) return
     await supabase.from('item_overrides').delete().eq('item_id', itemId)
     await recargar()
-    setMsg('Restaurado ✓')
+    setMsg(t('restored') + ' ✓')
   }
 
   if (runner.role !== 'admin') {
-    return <p style={{ color: C.gray }}>Solo el admin puede editar el catálogo.</p>
+    return <p style={{ color: C.gray }}>{t('adminOnly')}</p>
   }
 
   return (
     <>
       <div style={{ ...card, marginBottom: 12 }}>
-        <div style={sectionLabel}>Catálogo</div>
+        <div style={sectionLabel}>{t('tabCatalog')}</div>
         <p style={{ fontSize: 13, color: C.gray, margin: 0 }}>
-          Cambia cuántas unidades visuales lleva un espacio al 100%, cuántas piezas
-          representa cada unidad, y cuántas piezas trae una caja. Aplica de inmediato
-          para todos, sin volver a desplegar.
+{t('catalogHelp')}
         </p>
       </div>
 
@@ -58,16 +58,16 @@ export default function Catalogo({ runner }: { runner: Runner }) {
             <button onClick={() => setAbierto(abierta ? null : item.id)}
               style={{ display: 'flex', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 15 }}>
               <strong>{item.es}</strong>
-              <span style={{ color: C.gray, fontSize: 13 }}>{pcsBoxOf(item)} pzs/caja {abierta ? '▾' : '▸'}</span>
+              <span style={{ color: C.gray, fontSize: 13 }}>{pcsBoxOf(item)} {t('pcsBoxShort')} {abierta ? '▾' : '▸'}</span>
             </button>
 
             {abierta && (
               <div style={{ marginTop: 12 }}>
-                <Campo label="Piezas por caja" valor={pcsBoxOf(item)}
+                <Campo label={t('pcsPerBox')} valor={pcsBoxOf(item)}
                   onGuardar={v => guardar(item.id, 'box', { pcs_box: v, steps: null, pcs_per_step: null })} />
 
-                {out && <Bloque titulo="Bridges (outside)" std={out} item={item} entity="outside" onGuardar={guardar} />}
-                {main && <Bloque titulo="Main Hotel (Piso 2 y 3)" std={main} item={item} entity="main" onGuardar={guardar} />}
+                {out && <Bloque titulo={t('bridgesLabel')} std={out} item={item} entity="outside" onGuardar={guardar} />}
+                {main && <Bloque titulo={t('mainLabel')} std={main} item={item} entity="main" onGuardar={guardar} />}
 
                 <button onClick={() => restaurar(item.id)} style={{ ...btnGhost, marginTop: 10, color: C.red }}>
                   Restaurar valores originales
@@ -87,6 +87,7 @@ function Bloque({ titulo, std, item, entity, onGuardar }: {
   titulo: string; std: any; item: Item; entity: Entity
   onGuardar: (id: number, scope: string, campos: Record<string, number | null>) => void
 }) {
+  const { t, tUnit } = useT()
   const [steps, setSteps] = useState(String(std.steps))
   const [pps, setPps] = useState(String(std.pcsPerStep))
 
@@ -99,21 +100,21 @@ function Bloque({ titulo, std, item, entity, onGuardar }: {
       <div style={{ fontSize: 12, color: C.gray, marginBottom: 6 }}>{titulo}</div>
       <div style={{ display: 'flex', gap: 8 }}>
         <label style={{ flex: 1, fontSize: 12, color: C.gray }}>
-          {std.unitPlural} al 100%
+          {tUnit(std.unitPlural)} {t('at100')}
           <input value={steps} inputMode="decimal" onChange={e => setSteps(e.target.value)} style={{ ...input, marginTop: 4 }} />
         </label>
         <label style={{ flex: 1, fontSize: 12, color: C.gray }}>
-          pzs por {std.unit}
+          {t('pcsPer')} {tUnit(std.unit)}
           <input value={pps} inputMode="decimal" onChange={e => setPps(e.target.value)} style={{ ...input, marginTop: 4 }} />
         </label>
       </div>
       <p style={{ fontSize: 12, color: C.gray, margin: '6px 0 0' }}>
-        Estándar completo: <strong>{total} pzs</strong> por espacio
+        {t('fullStandard')} <strong>{total} {t('pcs')}</strong> {t('perSpace')}
       </p>
       <button
         onClick={() => onGuardar(item.id, entity, { steps: Number(steps), pcs_per_step: Number(pps), pcs_box: null })}
         style={{ ...btn(C.green), marginTop: 8, padding: 9, fontSize: 14 }}>
-        Guardar {titulo.split(' ')[0]}
+        {t('save')}
       </button>
     </div>
   )

@@ -265,7 +265,7 @@ export function deliveryPlan(item: Item, missing: number): Delivery {
   const ratio = missing / box
 
   if (ratio < BOX_THRESHOLD) {
-    return { mode: 'pcs', boxes: 0, loosePcs: missing, totalPcs: missing, label: `${missing} pzs sueltas` }
+    return { mode: 'pcs', boxes: 0, loosePcs: missing, totalPcs: missing, label: '' }
   }
 
   // Arriba del umbral: cajas completas MÁS las piezas exactas que falten.
@@ -276,15 +276,10 @@ export function deliveryPlan(item: Item, missing: number): Delivery {
 
   // Entre 30% y una caja: se lleva la caja completa (no hay de dónde sacar sueltas).
   if (boxes === 0) {
-    return { mode: 'boxes', boxes: 1, loosePcs: 0, totalPcs: box, label: '1 caja' }
+    return { mode: 'boxes', boxes: 1, loosePcs: 0, totalPcs: box, label: '' }
   }
 
-  const partes = [`${boxes} caja${boxes > 1 ? 's' : ''}`]
-  if (loose > 0) partes.push(`${loose} pzs`)
-  return {
-    mode: 'boxes', boxes, loosePcs: loose, totalPcs: missing,
-    label: partes.join(' + '),
-  }
+  return { mode: 'boxes', boxes, loosePcs: loose, totalPcs: missing, label: '' }
 }
 
 // ============================================================
@@ -344,25 +339,25 @@ export function boxesForStops(item: Item, stops: StopNeed[]): { boxes: number; l
 // La captura sigue el recorrido físico del bridge, de arriba a abajo,
 // para no andar buscando el item en la lista.
 // ============================================================
-export interface Shelf { id: string; nombre: string; items: number[] }
+export interface Shelf { id: string; nombre: string; en: string; items: number[] }
 
 export const SHELVES_OUTSIDE: Shelf[] = [
-  { id: 'o1', nombre: 'Shelf de arriba',     items: [1, 9, 8, 2] },
-  { id: 'o2', nombre: 'Shelf de en medio',   items: [11, 3, 7, 4] },
-  { id: 'o3', nombre: 'Abajo de los bins',   items: [10, 20, 5, 21, 22, 23, 17, 18] },
-  { id: 'o4', nombre: 'Capilares y agua',    items: [14, 16, 15, 13, 6] },
-  { id: 'o5', nombre: 'Colgados en el hook', items: [19, 12] },
+  { id: 'o1', nombre: 'Shelf de arriba', en: 'Top shelf',     items: [1, 9, 8, 2] },
+  { id: 'o2', nombre: 'Shelf de en medio', en: 'Middle shelf',   items: [11, 3, 7, 4] },
+  { id: 'o3', nombre: 'Abajo de los bins', en: 'Below the bins',   items: [10, 20, 5, 21, 22, 23, 17, 18] },
+  { id: 'o4', nombre: 'Capilares y agua', en: 'Hair products and water',    items: [14, 16, 15, 13, 6] },
+  { id: 'o5', nombre: 'Colgados en el hook', en: 'Hanging on the hook', items: [19, 12] },
 ]
 
 export const SHELVES_MAIN: Shelf[] = [
-  { id: 'm1', nombre: 'Shelf de arriba',        items: [1, 9, 8] },
-  { id: 'm2', nombre: 'Cajas de pods',          items: [4, 7, 5] },
-  { id: 'm3', nombre: 'Mugs, jars y wipes',     items: [27, 28, 20] },
-  { id: 'm4', nombre: 'Productos capilares',    items: [14, 16, 15, 13] },
-  { id: 'm5', nombre: 'Abajo de los capilares', items: [12, 3, 11, 10] },
-  { id: 'm6', nombre: 'En el suelo',            items: [19, 29] },
-  { id: 'm7', nombre: 'En la esquina',          items: [6] },
-  { id: 'm8', nombre: 'Shelf de la derecha (como caiga)', items: [21, 22, 23, 17, 18, 24, 25, 26, 2] },
+  { id: 'm1', nombre: 'Shelf de arriba', en: 'Top shelf',        items: [1, 9, 8] },
+  { id: 'm2', nombre: 'Cajas de pods', en: 'Pod boxes',          items: [4, 7, 5] },
+  { id: 'm3', nombre: 'Mugs, jars y wipes', en: 'Mugs, jars and wipes',     items: [27, 28, 20] },
+  { id: 'm4', nombre: 'Productos capilares', en: 'Hair products',    items: [14, 16, 15, 13] },
+  { id: 'm5', nombre: 'Abajo de los capilares', en: 'Below the hair products', items: [12, 3, 11, 10] },
+  { id: 'm6', nombre: 'En el suelo', en: 'On the floor',            items: [19, 29] },
+  { id: 'm7', nombre: 'En la esquina', en: 'In the corner',          items: [6] },
+  { id: 'm8', nombre: 'Shelf de la derecha (como caiga)', en: 'Right-hand shelf (wherever it fits)', items: [21, 22, 23, 17, 18, 24, 25, 26, 2] },
 ]
 
 export function shelvesFor(entity: Entity): Shelf[] {
@@ -392,6 +387,6 @@ export function groupByShelf<T extends { id: number }>(items: T[], entity: Entit
     if (enEsteShelf.length) out.push({ shelf, items: enEsteShelf })
   }
   const sueltos = items.filter(i => shelfRank(i.id, entity) === 9999)
-  if (sueltos.length) out.push({ shelf: { id: 'sx', nombre: 'Otros', items: [] }, items: sueltos })
+  if (sueltos.length) out.push({ shelf: { id: 'sx', nombre: 'Otros', en: 'Other', items: [] }, items: sueltos })
   return out
 }

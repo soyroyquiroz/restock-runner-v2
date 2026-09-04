@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { ITEM_BY_ID, pcsToBoxes, fmt } from '@/lib/data'
 import { supabase, ReportRow, SpaceStatusRow, spaceLabel, routeSort } from '@/lib/supabase'
 import { C, card, row, btnGhost, sectionLabel, Tab } from '@/lib/ui'
+import { useT } from '@/lib/i18n'
 
 export default function Progress() {
+  const { t, tUnit, lang } = useT()
   const [sub, setSub] = useState<'hoy' | 'inventario'>('hoy')
   const [reports, setReports] = useState<ReportRow[]>([])
   const [status, setStatus] = useState<SpaceStatusRow[]>([])
@@ -34,17 +36,17 @@ export default function Progress() {
   return (
     <>
       <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-        <Tab label="Hoy" active={sub === 'hoy'} onClick={() => setSub('hoy')} />
-        <Tab label="Inventario" active={sub === 'inventario'} onClick={() => setSub('inventario')} />
+        <Tab label={t('today')} active={sub === 'hoy'} onClick={() => setSub('hoy')} />
+        <Tab label={t('inventory')} active={sub === 'inventario'} onClick={() => setSub('inventario')} />
         <button onClick={load} style={{ ...btnGhost, marginLeft: 'auto' }}>↻</button>
       </div>
 
-      {loading && <p style={{ color: C.gray }}>Cargando…</p>}
+      {loading && <p style={{ color: C.gray }}>{t('loading')}</p>}
 
       {!loading && sub === 'hoy' && (
         <>
-          <div style={sectionLabel}>{reports.length} espacio{reports.length === 1 ? '' : 's'} surtido{reports.length === 1 ? '' : 's'} hoy</div>
-          {reports.length === 0 && <p style={{ color: C.gray }}>Nadie ha capturado nada hoy.</p>}
+          <div style={sectionLabel}>{reports.length} {t('spacesToday')}</div>
+          {reports.length === 0 && <p style={{ color: C.gray }}>{t('nothingToday')}</p>}
           {reports.map(r => (
             <div key={r.id} style={{ ...card, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
@@ -52,7 +54,7 @@ export default function Progress() {
                 <div style={{ fontSize: 12, color: C.gray }}>{r.runner_name} · {r.restock_type}</div>
               </div>
               <span style={{ fontSize: 12, color: C.gray }}>
-                {new Date(r.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                {new Date(r.created_at).toLocaleTimeString(lang === 'es' ? 'es-MX' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
           ))}
@@ -61,9 +63,9 @@ export default function Progress() {
 
       {!loading && sub === 'inventario' && (
         <>
-          <div style={sectionLabel}>Sacar del boathouse (faltante actual de toda la isla)</div>
+          <div style={sectionLabel}>{t('islandShort')}</div>
           {Object.keys(totals).length === 0 ? (
-            <p style={{ color: C.gray }}>Sin faltantes registrados.</p>
+            <p style={{ color: C.gray }}>{t('noShortage')}</p>
           ) : (
             <div style={{ ...card, marginBottom: 18 }}>
               {Object.entries(totals).map(([id, pcs]) => {
@@ -74,8 +76,8 @@ export default function Progress() {
                   <div key={id} style={row}>
                     <span style={{ fontWeight: 600 }}>{item.es}</span>
                     <span style={{ textAlign: 'right' }}>
-                      <strong style={{ color: C.green }}>{boxes > 0 ? `${boxes} caja${boxes > 1 ? 's' : ''}` : '—'}</strong>
-                      {remainderPcs > 0 && <span style={{ color: C.gray, fontSize: 12, display: 'block' }}>+ {remainderPcs} pcs</span>}
+                      <strong style={{ color: C.green }}>{boxes > 0 ? `${boxes} ${boxes > 1 ? t('boxes') : t('box')}` : '—'}</strong>
+                      {remainderPcs > 0 && <span style={{ color: C.gray, fontSize: 12, display: 'block' }}>+ {remainderPcs} {t('pcs')}</span>}
                     </span>
                   </div>
                 )
@@ -83,7 +85,7 @@ export default function Progress() {
             </div>
           )}
 
-          <div style={sectionLabel}>Nivel por espacio</div>
+          <div style={sectionLabel}>{t('levelBySpace')}</div>
           {Object.entries(bySpace).map(([k, rows]) => {
             const faltan = rows.filter(r => r.missing_pcs > 0)
             const head = rows[0]
@@ -92,11 +94,11 @@ export default function Progress() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                   <strong>{spaceLabel(head)}</strong>
                   <span style={{ fontSize: 11, color: C.gray }}>
-                    {head.updated_by} · {new Date(head.updated_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
+                    {head.updated_by} · {new Date(head.updated_at).toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', { day: '2-digit', month: 'short' })}
                   </span>
                 </div>
                 {faltan.length === 0 ? (
-                  <p style={{ color: C.green, margin: 0, fontSize: 13 }}>Completo</p>
+                  <p style={{ color: C.green, margin: 0, fontSize: 13 }}>{t('complete')}</p>
                 ) : faltan.map(r => (
                   <div key={r.item_id} style={{ ...row, borderBottom: 'none', padding: '3px 0' }}>
                     <span style={{ fontSize: 13 }}>{r.item_name}</span>
