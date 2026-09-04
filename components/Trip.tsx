@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { ITEM_BY_ID, fmt, allocateAcrossStops, StopNeed } from '@/lib/data'
+import { ITEM_BY_ID, fmt, allocateAcrossStops, StopNeed, bloqueDe } from '@/lib/data'
 import {
   supabase, Runner, SpaceStatusRow, Trip, TripStop, TripStopItem, TripLoadItem,
   spaceLabel, routeSort,
@@ -76,7 +76,9 @@ function BuildTrip({ runner, onCreated }: { runner: Runner; onCreated: () => voi
     const grupos: Record<string, any[]> = {}
     chosen.forEach(g => {
       const head = g[0]
-      const gk = head.entity === 'outside' ? `lodge-${head.lodge_num}` : `piso-${head.space_name}`
+      // Bloque, no lodge: dentro de 1-4, 5-6, 7 u 8 el sobrante se arrastra
+      // de un lodge al siguiente. Main va por piso, cada uno independiente.
+      const gk = head.entity === 'outside' ? bloqueDe(head.lodge_num) : `piso-${head.space_name}`
       ;(grupos[gk] ||= []).push(g)
     })
 

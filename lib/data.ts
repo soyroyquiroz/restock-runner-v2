@@ -131,17 +131,76 @@ export const LODGES = [
 
 export const PISOS = ['Piso 1', 'Piso 2', 'Piso 3', "Hank's Closet"]
 
+// ============================================================
+// BLOQUES DE LA ISLA
+// Dentro de un bloque las distancias permiten arrastrar el sobrante
+// de un lodge al siguiente. Entre bloques no: cada uno arranca limpio.
+// ============================================================
+export const BLOQUES: { id: string; nombre: string; lodges: number[] }[] = [
+  { id: 'b1', nombre: 'Lodges 1-4', lodges: [1, 2, 3, 4] },
+  { id: 'b2', nombre: 'Lodges 5-6', lodges: [5, 6] },
+  { id: 'b3', nombre: 'Lodge 7',    lodges: [7] },
+  { id: 'b4', nombre: 'Lodge 8',    lodges: [8] },
+]
+
+export function bloqueDe(lodge: number | null | undefined): string {
+  const b = BLOQUES.find(x => lodge != null && x.lodges.includes(lodge))
+  return b ? b.id : 'sin-bloque'
+}
+
+// ============================================================
+// OVERRIDES DEL CATÁLOGO (editables desde la pestaña Catálogo)
+// El código trae los valores por defecto; la base puede sobrescribirlos
+// sin que haya que tocar código ni volver a desplegar.
+// ============================================================
+export interface Override { steps?: number; pcs_per_step?: number; pcs_box?: number }
+
+let OVERRIDES: Record<string, Override> = {}
+
+export function loadOverrides(rows: { item_id: number; scope: string; steps: number | null; pcs_per_step: number | null; pcs_box: number | null }[]) {
+  OVERRIDES = {}
+  rows.forEach(r => {
+    OVERRIDES[`${r.item_id}|${r.scope}`] = {
+      steps: r.steps ?? undefined,
+      pcs_per_step: r.pcs_per_step ?? undefined,
+      pcs_box: r.pcs_box ?? undefined,
+    }
+  })
+}
+
+export function hasOverrides(): boolean {
+  return Object.keys(OVERRIDES).length > 0
+}
+
+// Piezas por caja efectivas (las del catálogo o las editadas)
+export function pcsBoxOf(item: Item): number {
+  return OVERRIDES[`${item.id}|box`]?.pcs_box ?? item.pcsBox
+}
+
 const CAFES = [4, 5, 7]
 
 // Piso 1: 1 caja de TODO, excepto cafés = 3 cajas verdes.
 // Hank's Closet: tiene de todo (hereda Piso 2/3) y es el único con Slippers.
 export function getStandard(item: Item, entity: Entity, space?: string | null): Standard | null {
-  if (entity === 'outside') return item.outside ?? null
-  if (space === 'Piso 1') {
-    if (CAFES.includes(item.id)) return { steps: 3, pcsPerStep: 24, unit: 'caja verde', unitPlural: 'cajas verdes' }
-    return caja(1, item.pcsBox)
+  let base: Standard | null
+  if (entity === 'outside') {
+    base = item.outside ?? null
+  } else if (space === 'Piso 1') {
+    base = CAFES.includes(item.id)
+      ? { steps: 3, pcsPerStep: 24, unit: 'caja verde', unitPlural: 'cajas verdes' }
+      : caja(1, pcsBoxOf(item))
+  } else {
+    base = item.main ?? null
   }
-  return item.main ?? null
+  if (!base) return null
+
+  const ov = OVERRIDES[`${item.id}|${entity}`]
+  if (!ov) return base
+  return {
+    ...base,
+    steps: ov.steps ?? base.steps,
+    pcsPerStep: ov.pcs_per_step ?? base.pcsPerStep,
+  }
 }
 
 export function getItemsFor(entity: Entity, type: RestockType, space?: string | null): Item[] {
@@ -159,7 +218,8 @@ export function missingPcs(item: Item, entity: Entity, space: string | null, ste
 }
 
 export function pcsToBoxes(item: Item, pcs: number): { boxes: number; remainderPcs: number } {
-  return { boxes: Math.floor(pcs / item.pcsBox), remainderPcs: pcs % item.pcsBox }
+  const box = pcsBoxOf(item)
+  return { boxes: Math.floor(pcs / box), remainderPcs: pcs % box }
 }
 
 // Unidades que NO se pueden partir a la mitad
@@ -195,7 +255,8 @@ export interface Delivery {
 export function deliveryPlan(item: Item, missing: number): Delivery {
   if (missing <= 0) return { mode: 'nada', boxes: 0, loosePcs: 0, totalPcs: 0, label: 'nada' }
 
-  const ratio = missing / item.pcsBox
+  const box = pcsBoxOf(item)
+  const ratio = missing / box
 
   if (ratio < BOX_THRESHOLD) {
     return { mode: 'pcs', boxes: 0, loosePcs: missing, totalPcs: missing, label: `${missing} pzs sueltas` }
@@ -205,11 +266,11 @@ export function deliveryPlan(item: Item, missing: number): Delivery {
   // No se redondea hacia arriba: nunca se manda de más asumiendo que hay
   // sobrantes de una caja abierta, porque esos sobrantes no están registrados.
   const boxes = Math.floor(ratio)
-  const loose = missing - boxes * item.pcsBox
+  const loose = missing - boxes * box
 
   // Entre 30% y una caja: se lleva la caja completa (no hay de dónde sacar sueltas).
   if (boxes === 0) {
-    return { mode: 'boxes', boxes: 1, loosePcs: 0, totalPcs: item.pcsBox, label: '1 caja' }
+    return { mode: 'boxes', boxes: 1, loosePcs: 0, totalPcs: box, label: '1 caja' }
   }
 
   const partes = [`${boxes} caja${boxes > 1 ? 's' : ''}`]
@@ -248,7 +309,8 @@ export function allocateAcrossStops(item: Item, stops: StopNeed[]): StopAlloc[] 
   }
 
   // Si el lodge entero necesita menos del umbral, no vale la pena abrir caja
-  if (total < item.pcsBox * BOX_THRESHOLD) {
+  const box = pcsBoxOf(item)
+  if (total < box * BOX_THRESHOLD) {
     return stops.map(s => ({ key: s.key, park: 0, use: s.missing, fromCarry: 0, carryAfter: 0, loose: true }))
   }
 
@@ -256,7 +318,7 @@ export function allocateAcrossStops(item: Item, stops: StopNeed[]): StopAlloc[] 
   return stops.map(s => {
     let park = 0
     const fromCarry = Math.min(carry, s.missing)
-    while (carry < s.missing) { park++; carry += item.pcsBox }
+    while (carry < s.missing) { park++; carry += box }
     carry -= s.missing
     return { key: s.key, park, use: s.missing, fromCarry, carryAfter: carry, loose: false }
   })
