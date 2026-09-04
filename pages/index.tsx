@@ -7,8 +7,9 @@ import TripSection from '@/components/Trip'
 import Progress from '@/components/Progress'
 import Admin from '@/components/Admin'
 import Catalogo from '@/components/Catalogo'
+import Cuenta from '@/components/Cuenta'
 
-type View = 'ronda' | 'viaje' | 'progreso' | 'runners' | 'catalogo'
+type View = 'ronda' | 'viaje' | 'progreso' | 'runners' | 'catalogo' | 'cuenta'
 
 export default function Home() {
   const [runner, setRunner] = useState<Runner | null>(null)
@@ -42,13 +43,15 @@ export default function Home() {
         <Tab label="Progreso" active={view === 'progreso'} onClick={() => setView('progreso')} />
         {runner.role === 'admin' && <Tab label="Runners" active={view === 'runners'} onClick={() => setView('runners')} />}
         {runner.role === 'admin' && <Tab label="Catálogo" active={view === 'catalogo'} onClick={() => setView('catalogo')} />}
+        <Tab label="Cuenta" active={view === 'cuenta'} onClick={() => setView('cuenta')} />
       </div>
 
       {view === 'ronda' && <Capture runner={runner} />}
       {view === 'viaje' && <TripSection runner={runner} />}
       {view === 'progreso' && <Progress />}
-      {view === 'runners' && <Admin />}
+      {view === 'runners' && runner.role === 'admin' && <Admin runner={runner} />}
       {view === 'catalogo' && runner.role === 'admin' && <Catalogo runner={runner} />}
+      {view === 'cuenta' && <Cuenta runner={runner} onLogout={() => { localStorage.removeItem('rr-session'); setRunner(null) }} />}
     </div>
   )
 }
