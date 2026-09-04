@@ -211,6 +211,8 @@ export function getItemsFor(entity: Entity, type: RestockType, space?: string | 
   let pool = ITEMS.filter(i => i.in.includes(entity) && getStandard(i, entity, space))
   // Slippers solo aparecen en Hank's Closet; el resto de items sí está en Hank's.
   pool = pool.filter(i => !i.hanksOnly || space === "Hank's Closet")
+  // Hank's es el almacén: hay agua de sobra y no tiene estándar, no se captura ahí
+  if (space === "Hank's Closet") pool = pool.filter(i => i.id !== 6)
   if (type === 'urgente') pool = pool.filter(i => i.priority === 'high')
   return pool
 }
@@ -359,7 +361,8 @@ export const SHELVES_MAIN: Shelf[] = [
   { id: 'm4', nombre: 'Productos capilares',    items: [14, 16, 15, 13] },
   { id: 'm5', nombre: 'Abajo de los capilares', items: [12, 3, 11, 10] },
   { id: 'm6', nombre: 'En el suelo',            items: [19, 29] },
-  { id: 'm7', nombre: 'Shelf de la derecha (como caiga)', items: [6, 21, 22, 23, 17, 18, 24, 25, 26, 2] },
+  { id: 'm7', nombre: 'En la esquina',          items: [6] },
+  { id: 'm8', nombre: 'Shelf de la derecha (como caiga)', items: [21, 22, 23, 17, 18, 24, 25, 26, 2] },
 ]
 
 export function shelvesFor(entity: Entity): Shelf[] {
