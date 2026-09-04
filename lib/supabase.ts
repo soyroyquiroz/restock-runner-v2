@@ -76,6 +76,9 @@ export interface TripStopItem {
   units: number
   steps_standard: number
   pcs: number
+  park_boxes: number
+  from_carry: number
+  carry_after: number
   delivered: boolean
 }
 

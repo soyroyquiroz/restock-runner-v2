@@ -219,3 +219,54 @@ export function deliveryPlan(item: Item, missing: number): Delivery {
     label: partes.join(' + '),
   }
 }
+
+// ============================================================
+// REPARTO POR LODGE CON SALDO ARRASTRADO
+// El proceso físico: llegas con el carrito, parkeas una caja en el
+// primer bridge que la necesita, sacas lo de ese bridge y te llevas
+// el sobrante al siguiente. Solo abres otra caja cuando el sobrante
+// ya no alcanza. Por eso el cálculo es del LODGE completo en orden
+// de ruta, no de cada bridge por separado.
+// ============================================================
+
+export interface StopNeed { key: string; missing: number }
+
+export interface StopAlloc {
+  key: string
+  park: number        // cajas que parkeas EN este bridge
+  use: number         // piezas que dejas aquí
+  fromCarry: number   // cuántas de esas venían del sobrante que traías
+  carryAfter: number  // sobrante que te llevas al siguiente
+  loose: boolean      // el lodge entero va en piezas sueltas, sin abrir caja
+}
+
+export function allocateAcrossStops(item: Item, stops: StopNeed[]): StopAlloc[] {
+  const total = stops.reduce((s, x) => s + x.missing, 0)
+
+  if (total <= 0) {
+    return stops.map(s => ({ key: s.key, park: 0, use: 0, fromCarry: 0, carryAfter: 0, loose: false }))
+  }
+
+  // Si el lodge entero necesita menos del umbral, no vale la pena abrir caja
+  if (total < item.pcsBox * BOX_THRESHOLD) {
+    return stops.map(s => ({ key: s.key, park: 0, use: s.missing, fromCarry: 0, carryAfter: 0, loose: true }))
+  }
+
+  let carry = 0
+  return stops.map(s => {
+    let park = 0
+    const fromCarry = Math.min(carry, s.missing)
+    while (carry < s.missing) { park++; carry += item.pcsBox }
+    carry -= s.missing
+    return { key: s.key, park, use: s.missing, fromCarry, carryAfter: carry, loose: false }
+  })
+}
+
+// Cajas totales del boathouse para un lodge = suma de lo que parkeas
+export function boxesForStops(item: Item, stops: StopNeed[]): { boxes: number; loosePcs: number } {
+  const alloc = allocateAcrossStops(item, stops)
+  return {
+    boxes: alloc.reduce((s, a) => s + a.park, 0),
+    loosePcs: alloc.filter(a => a.loose).reduce((s, a) => s + a.use, 0),
+  }
+}

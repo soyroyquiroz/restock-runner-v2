@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { ITEM_BY_ID, pcsToBoxes, fmt, deliveryPlan } from '@/lib/data'
+import { ITEM_BY_ID, fmt, allocateAcrossStops, StopNeed } from '@/lib/data'
 import {
   supabase, Runner, SpaceStatusRow, Trip, TripStop, TripStopItem, TripLoadItem,
   spaceLabel, routeSort,
@@ -70,35 +70,73 @@ function BuildTrip({ runner, onCreated }: { runner: Runner; onCreated: () => voi
     const stopId: Record<string, string> = Object.fromEntries(stops.map((s: any) => [s.space_key, s.id]))
 
     // Qué baja en cada parada
-    const stopItems = chosen.flatMap(g => g.map(r => ({
-      stop_id: stopId[r.space_key], trip_id: trip.id,
-      item_id: r.item_id, item_name: r.item_name,
-      units: Number(r.steps_standard) - Number(r.steps_present),
-      steps_standard: Number(r.steps_standard),
-      pcs: r.missing_pcs, delivered: false,
-    })))
+    // Agrupa las paradas por LODGE (o por piso en Main). Dentro de cada
+    // grupo, el reparto va en orden de ruta arrastrando el sobrante:
+    // solo se parkea una caja nueva cuando lo que traes ya no alcanza.
+    const grupos: Record<string, any[]> = {}
+    chosen.forEach(g => {
+      const head = g[0]
+      const gk = head.entity === 'outside' ? `lodge-${head.lodge_num}` : `piso-${head.space_name}`
+      ;(grupos[gk] ||= []).push(g)
+    })
+
+    const stopItems: any[] = []
+    Object.values(grupos).forEach(spacesDelGrupo => {
+      // qué items aparecen en este lodge
+      const itemIds = Array.from(new Set(spacesDelGrupo.flatMap(g => g.map((r: any) => r.item_id))))
+
+      itemIds.forEach(itemId => {
+        const item = ITEM_BY_ID[Number(itemId)]
+        if (!item) return
+
+        const needs: StopNeed[] = spacesDelGrupo.map(g => {
+          const fila = g.find((r: any) => r.item_id === itemId)
+          return { key: g[0].space_key, missing: fila ? fila.missing_pcs : 0 }
+        })
+
+        const alloc = allocateAcrossStops(item, needs)
+
+        alloc.forEach((a, i) => {
+          if (a.use <= 0) return
+          const g = spacesDelGrupo[i]
+          const fila = g.find((r: any) => r.item_id === itemId)
+          stopItems.push({
+            stop_id: stopId[a.key], trip_id: trip.id,
+            item_id: item.id, item_name: item.es,
+            units: Number(fila.steps_standard) - Number(fila.steps_present),
+            steps_standard: Number(fila.steps_standard),
+            pcs: a.use,
+            park_boxes: a.park,
+            from_carry: a.fromCarry,
+            carry_after: a.carryAfter,
+            delivered: false,
+          })
+        })
+      })
+    })
     const { error: e3 } = await supabase.from('trip_stop_items').insert(stopItems)
     if (e3) { setMsg('Error al armar las paradas: ' + e3.message); setBusy(false); return }
 
     // Lista de picking consolidada del boathouse
-    // Se suma la ENTREGA planeada de cada parada (regla del 30%), no el
-    // faltante crudo. Así lo que cargas es exactamente lo que vas a bajar.
-    const agg: Record<number, { name: string; boxes: number; loose: number; total: number }> = {}
+    // Del boathouse sacas exactamente las cajas que vas a parkear,
+    // más las piezas sueltas de los lodges que no ameritan abrir caja.
+    const agg: Record<number, { name: string; boxes: number; loose: number }> = {}
     stopItems.forEach((si: any) => {
-      const item = ITEM_BY_ID[si.item_id]
-      if (!item) return
-      const plan = deliveryPlan(item, si.pcs)
-      agg[si.item_id] ||= { name: si.item_name, boxes: 0, loose: 0, total: 0 }
-      agg[si.item_id].boxes += plan.boxes
-      agg[si.item_id].loose += plan.loosePcs
-      agg[si.item_id].total += plan.totalPcs
+      agg[si.item_id] ||= { name: si.item_name, boxes: 0, loose: 0 }
+      agg[si.item_id].boxes += si.park_boxes
+      if (si.park_boxes === 0 && si.from_carry === 0) agg[si.item_id].loose += si.pcs
     })
     const loadItems = Object.entries(agg)
-      .filter(([, v]) => v.total > 0)
-      .map(([id, v]) => ({
-        trip_id: trip.id, item_id: Number(id), item_name: v.name,
-        total_pcs: v.total, boxes: v.boxes, remainder_pcs: v.loose, loaded: false,
-      }))
+      .filter(([, v]) => v.boxes > 0 || v.loose > 0)
+      .map(([id, v]) => {
+        const item = ITEM_BY_ID[Number(id)]
+        return {
+          trip_id: trip.id, item_id: Number(id), item_name: v.name,
+          total_pcs: v.boxes * (item?.pcsBox ?? 0) + v.loose,
+          boxes: v.boxes, remainder_pcs: v.loose, loaded: false,
+        }
+      })
+
     const { error: e4 } = await supabase.from('trip_load_items').insert(loadItems)
     if (e4) { setMsg('Error al armar la lista de carga: ' + e4.message); setBusy(false); return }
 
@@ -287,14 +325,18 @@ function Route({ trip, onDone }: { trip: Trip; onDone: () => void }) {
         <Section title={`Parada ${doneCount + 1} · ${spaceLabel(current)}`}>
           {currentItems.length === 0 && <p style={{ color: C.gray, margin: 0 }}>Nada que bajar aquí.</p>}
           {currentItems.map(it => {
-            const item = ITEM_BY_ID[it.item_id]
-            const plan = item ? deliveryPlan(item, it.pcs) : null
+            const park = Number(it.park_boxes ?? 0)
+            const carry = Number(it.carry_after ?? 0)
             return (
               <Check key={it.id} on={it.delivered} onClick={() => toggleItem(it)}>
-                <strong>Deja {plan ? plan.label : `${it.pcs} pzs`} · {it.item_name}</strong>
+                <strong>
+                  {park > 0
+                    ? `Parkea ${park} caja${park > 1 ? 's' : ''} · ${it.item_name}`
+                    : `${it.pcs} pzs de lo que traes · ${it.item_name}`}
+                </strong>
                 <div style={{ fontSize: 12, color: C.gray }}>
-                  falta {fmt(Number(it.units))} unidades ({it.pcs} pzs)
-                  {plan?.mode === 'boxes' && plan.totalPcs > it.pcs && ' · caja completa, el sobrante se queda ahí'}
+                  deja {it.pcs} pzs ({fmt(Number(it.units))} unidades)
+                  {carry > 0 && ` · te sobran ${carry} para el siguiente`}
                 </div>
               </Check>
             )
