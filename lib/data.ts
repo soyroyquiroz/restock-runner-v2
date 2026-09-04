@@ -174,3 +174,36 @@ export function allowsHalf(std: Standard): boolean {
 export function fmt(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1)
 }
+
+// ============================================================
+// LÓGICA DE ENTREGA POR BRIDGE
+// Si falta menos del 30% de una caja -> se dejan piezas sueltas.
+// Si falta 30% o más -> se deja la caja completa en el bridge.
+// Nace de que no siempre traes el carrito de golf: por poco no vale
+// la pena cargar una caja, y por mucho no vale la pena contar piezas.
+// ============================================================
+export const BOX_THRESHOLD = 0.30
+
+export interface Delivery {
+  mode: 'pcs' | 'boxes' | 'nada'
+  boxes: number
+  loosePcs: number
+  totalPcs: number   // lo que realmente dejas, no lo que falta
+  label: string
+}
+
+export function deliveryPlan(item: Item, missing: number): Delivery {
+  if (missing <= 0) return { mode: 'nada', boxes: 0, loosePcs: 0, totalPcs: 0, label: 'nada' }
+
+  const ratio = missing / item.pcsBox
+
+  if (ratio < BOX_THRESHOLD) {
+    return { mode: 'pcs', boxes: 0, loosePcs: missing, totalPcs: missing, label: `${missing} pzs sueltas` }
+  }
+
+  const boxes = Math.max(1, Math.round(ratio))
+  return {
+    mode: 'boxes', boxes, loosePcs: 0, totalPcs: boxes * item.pcsBox,
+    label: `${boxes} caja${boxes > 1 ? 's' : ''}`,
+  }
+}
