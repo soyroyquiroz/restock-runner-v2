@@ -332,3 +332,43 @@ export function boxesForStops(item: Item, stops: StopNeed[]): { boxes: number; l
     loosePcs: alloc.filter(a => a.loose).reduce((s, a) => s + a.use, 0),
   }
 }
+
+// ============================================================
+// ORDEN VISUAL DEL CLOSET
+// La captura sigue el recorrido físico del bridge, de arriba a abajo,
+// para no andar buscando el item en la lista.
+// ============================================================
+export interface Shelf { id: string; nombre: string; items: number[] }
+
+export const SHELVES: Shelf[] = [
+  { id: 's1', nombre: 'Shelf de arriba',        items: [1, 9, 8, 2] },              // TP, cups, kleenex, paper towel
+  { id: 's2', nombre: 'Shelf de en medio',      items: [11, 3, 7, 4] },             // shower caps, soap, decaf, coffee
+  { id: 's3', nombre: 'Abajo de los bins',      items: [10, 20, 5, 21, 22, 23, 17, 18, 24, 25, 26] },
+  { id: 's4', nombre: 'Capilares y agua',       items: [14, 16, 15, 13, 6] },       // bw, cond, shmp, bl, agua
+  { id: 's5', nombre: 'Colgados en el hook',    items: [19, 12] },                  // condiment kit, laundry bags
+]
+
+const SHELF_POS: Record<number, number> = {}
+SHELVES.forEach((sh, si) => sh.items.forEach((id, ii) => { SHELF_POS[id] = si * 100 + ii }))
+
+export function shelfRank(itemId: number): number {
+  return SHELF_POS[itemId] ?? 9999
+}
+
+export function shelfOf(itemId: number): Shelf | null {
+  return SHELVES.find(sh => sh.items.includes(itemId)) ?? null
+}
+
+// Agrupa una lista de items por shelf, en orden de recorrido
+export function groupByShelf<T extends { id: number }>(items: T[]): { shelf: Shelf; items: T[] }[] {
+  const out: { shelf: Shelf; items: T[] }[] = []
+  for (const shelf of SHELVES) {
+    const enEsteShelf = shelf.items
+      .map(id => items.find(i => i.id === id))
+      .filter(Boolean) as T[]
+    if (enEsteShelf.length) out.push({ shelf, items: enEsteShelf })
+  }
+  const sueltos = items.filter(i => shelfRank(i.id) === 9999)
+  if (sueltos.length) out.push({ shelf: { id: 'sx', nombre: 'Otros', items: [] }, items: sueltos })
+  return out
+}

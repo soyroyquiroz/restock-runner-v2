@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   LODGES, PISOS, getItemsFor, getStandard,
   missingPcs, pcsToBoxes, fmt, allowsHalf,
-  Entity, RestockType,
+  Entity, RestockType, groupByShelf,
 } from '@/lib/data'
 import { supabase, Runner, spaceKey } from '@/lib/supabase'
 import { C, card, btn, Section, Pick, input } from '@/lib/ui'
@@ -143,7 +143,13 @@ export default function Capture({ runner }: { runner: Runner }) {
           <p style={{ fontSize: 12, color: C.gray, marginTop: -4 }}>
             Mueve el slider a las unidades que <strong>SÍ hay</strong>. Lo que falta se calcula solo.
           </p>
-          {visibleItems.map(item => {
+          {groupByShelf(visibleItems).map(({ shelf, items: delShelf }) => (
+            <div key={shelf.id}>
+              <div style={{
+                fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6, color: C.gray,
+                marginTop: 14, paddingTop: 10, borderTop: `2px solid ${C.line}`,
+              }}>{shelf.nombre}</div>
+          {delShelf.map(item => {
             const std = getStandard(item, entity, piso)!
             const steps = present[item.id] ?? std.steps
             const pct = Math.round((steps / std.steps) * 100)
@@ -172,6 +178,8 @@ export default function Capture({ runner }: { runner: Runner }) {
             )
           })}
 
+            </div>
+          ))}
           <button onClick={save} disabled={saving} style={{ ...btn(saving ? C.gray : C.green), marginTop: 16 }}>
             {saving ? 'Guardando…' : 'Guardar espacio'}
           </button>

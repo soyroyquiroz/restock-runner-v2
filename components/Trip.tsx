@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { ITEM_BY_ID, fmt, allocateAcrossStops, StopNeed, bloqueDe } from '@/lib/data'
+import { ITEM_BY_ID, fmt, allocateAcrossStops, StopNeed, bloqueDe, shelfRank } from '@/lib/data'
 import {
   supabase, Runner, SpaceStatusRow, Trip, TripStop, TripStopItem, TripLoadItem,
   spaceLabel, routeSort,
@@ -264,7 +264,8 @@ function Route({ trip, onDone }: { trip: Trip; onDone: () => void }) {
   useEffect(() => { load() }, [load])
 
   const current = stops.find(s => !s.delivered_at)
-  const currentItems = current ? items.filter(i => i.stop_id === current.id) : []
+  const currentItems = (current ? items.filter(i => i.stop_id === current.id) : [])
+    .slice().sort((a, b) => shelfRank(a.item_id) - shelfRank(b.item_id))
 
   async function toggleItem(it: TripStopItem) {
     setItems(prev => prev.map(x => x.id === it.id ? { ...x, delivered: !x.delivered } : x))
