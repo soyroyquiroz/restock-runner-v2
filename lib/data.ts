@@ -201,9 +201,21 @@ export function deliveryPlan(item: Item, missing: number): Delivery {
     return { mode: 'pcs', boxes: 0, loosePcs: missing, totalPcs: missing, label: `${missing} pzs sueltas` }
   }
 
-  const boxes = Math.max(1, Math.round(ratio))
+  // Arriba del umbral: cajas completas MÁS las piezas exactas que falten.
+  // No se redondea hacia arriba: nunca se manda de más asumiendo que hay
+  // sobrantes de una caja abierta, porque esos sobrantes no están registrados.
+  const boxes = Math.floor(ratio)
+  const loose = missing - boxes * item.pcsBox
+
+  // Entre 30% y una caja: se lleva la caja completa (no hay de dónde sacar sueltas).
+  if (boxes === 0) {
+    return { mode: 'boxes', boxes: 1, loosePcs: 0, totalPcs: item.pcsBox, label: '1 caja' }
+  }
+
+  const partes = [`${boxes} caja${boxes > 1 ? 's' : ''}`]
+  if (loose > 0) partes.push(`${loose} pzs`)
   return {
-    mode: 'boxes', boxes, loosePcs: 0, totalPcs: boxes * item.pcsBox,
-    label: `${boxes} caja${boxes > 1 ? 's' : ''}`,
+    mode: 'boxes', boxes, loosePcs: loose, totalPcs: missing,
+    label: partes.join(' + '),
   }
 }
