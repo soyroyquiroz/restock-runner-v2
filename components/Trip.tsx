@@ -203,6 +203,11 @@ function LoadCart({ trip, onReady, onCancel }: { trip: Trip; onReady: () => void
     await supabase.from('trip_load_items').update({ loaded: !it.loaded }).eq('id', it.id)
   }
 
+  async function setAll(value: boolean) {
+    setItems(prev => prev.map(x => ({ ...x, loaded: value })))
+    await supabase.from('trip_load_items').update({ loaded: value }).eq('trip_id', trip.id)
+  }
+
   async function start() {
     await supabase.from('trips').update({ status: 'entregando' }).eq('id', trip.id)
     onReady()
@@ -222,6 +227,11 @@ function LoadCart({ trip, onReady, onCancel }: { trip: Trip; onReady: () => void
         <p style={{ fontSize: 13, color: C.gray, marginTop: -4 }}>
           {t('loadHelp')} {stops.length} {stops.length === 1 ? t('stop') : t('stops')}, {t('inOneTrip')}
         </p>
+        {items.length > 0 && (
+          <button onClick={() => setAll(pending > 0)} style={{ ...btnGhost, width: '100%', marginBottom: 8 }}>
+            {pending > 0 ? t('selectAll') : t('deselectAll')}
+          </button>
+        )}
         {items.map(it => (
           <Check key={it.id} on={it.loaded} onClick={() => toggle(it)}>
             <strong>{it.item_name}</strong>
