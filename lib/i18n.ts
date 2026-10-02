@@ -62,6 +62,8 @@ export const STRINGS: Dict = {
   stop:         { en: 'stop',             es: 'parada' },
   building:     { en: 'Building…',        es: 'Armando…' },
   step2Load:    { en: 'Step 2 · Load the cart', es: 'Paso 2 · Carga el carrito' },
+  selectAll:    { en: 'Select all', es: 'Seleccionar todo' },
+  deselectAll:  { en: 'Deselect all', es: 'Quitar todo' },
   loadHelp:     { en: 'Everything you need from the boathouse for',
                   es: 'Todo lo que necesitas del boathouse para' },
   inOneTrip:    { en: 'in a single trip.', es: 'en un solo viaje.' },
